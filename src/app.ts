@@ -1,6 +1,6 @@
 import { CommandRegistry } from './commands/registry';
 import { MetadataIndex } from './core/index/MetadataIndex';
-import { IndexedDBAdapter } from './core/vault/storage';
+import { activateVault, getBrowserAdapter, loadSavedVault, vaultLabelFor } from './core/vault/vaultManager';
 import { Vault } from './core/vault/Vault';
 import { SAMPLE_VAULT } from './core/vault/sampleVault';
 import type { StorageAdapter } from './core/types';
@@ -29,17 +29,25 @@ function createApp(adapter: StorageAdapter): NotoApp {
   return { vault, index, commands };
 }
 
-export const app: NotoApp = createApp(new IndexedDBAdapter('default'));
+export const app: NotoApp = createApp(getBrowserAdapter());
 
-/** Load the vault (seeding the sample notes on first run) and attach the index. */
+/** Switch the running app to another storage backend (used by the settings modal). */
+export function switchVault(adapter: StorageAdapter): Promise<void> {
+  return activateVault(app, adapter);
+}
+
+/** Load the last-used vault (seeding the sample notes into an empty browser vault) and attach the index. */
 export async function bootstrap(): Promise<void> {
+  const adapter = await loadSavedVault();
+  if (adapter !== app.vault.adapter) app.vault.adapter = adapter;
   await app.vault.load();
-  if (app.vault.getFiles().length === 0) {
+  if (adapter.kind === 'indexeddb' && app.vault.getFiles().length === 0) {
     for (const f of SAMPLE_VAULT.files) await app.vault.create(f.path, f.content);
     for (const d of SAMPLE_VAULT.folders) if (!app.vault.folderExists(d)) await app.vault.createFolder(d);
   }
   app.index.attach();
   const ws = useWorkspace.getState();
+  ws.setVaultLabel(vaultLabelFor(adapter));
   for (const tab of ws.openTabs) if (!app.vault.exists(tab)) ws.fileDeleted(tab);
   if (!ws.activeFile || !app.vault.exists(ws.activeFile)) {
     const first = app.vault.getFile('Welcome.md') ?? app.vault.getMarkdownFiles()[0];
