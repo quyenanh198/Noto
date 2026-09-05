@@ -1,0 +1,82 @@
+.tags-pane {
+  padding: 0 4px 8px;
+}
+
+.tags-pane .pane-header {
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+.tags-header-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tags-count {
+  display: inline-block;
+  min-width: 18px;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: var(--background-modifier-border);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 16px;
+  text-align: center;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.tags-sort {
+  width: 24px;
+  height: 24px;
+}
+.tags-sort svg {
+  width: 16px;
+  height: 16px;
+}
+
+.tag-item {
+  height: 24px;
+  padding-top: 0;
+  padding-bottom: 0;
+  gap: 2px;
+}
+.tag-item-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-normal);
+}
+.tag-item-count {
+  flex: none;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  text-align: right;
+}
+
+.tags-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+.tags-chevron:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+.tags-chevron svg {
+  width: 14px;
+  height: 14px;
+}
+.tags-chevron-spacer {
+  cursor: inherit;
+}
