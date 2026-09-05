@@ -82,7 +82,9 @@ test.describe('editor', () => {
     await content.click();
     await page.keyboard.press(`${mod}+End`);
     await page.keyboard.type('\nSee [[Markdown');
-    await expect(page.locator('.cm-tooltip-autocomplete')).toBeVisible();
+    await expect(page.locator('.cm-tooltip-autocomplete li[aria-selected="true"]')).toContainText('Markdown syntax');
+    // CodeMirror ignores Enter for ~75 ms after the completion list (re)opens, so give it a moment.
+    await page.waitForTimeout(150);
     await page.keyboard.press('Enter');
     await expect(content).toContainText('[[Markdown syntax]]');
     await page.waitForTimeout(500);
