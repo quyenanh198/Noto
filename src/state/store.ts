@@ -34,11 +34,17 @@ export interface WorkspaceState {
   history: string[];
   historyIndex: number;
   fontSize: number;
+  /** Cap the editor/reading width (`--editor-max-width`); when false, content spans the full pane. */
+  readableLineLength: boolean;
+  /** Human-readable name of the current vault ('Browser storage' or the folder name). */
+  vaultLabel: string;
   /** Set true once the vault has loaded. */
   ready: boolean;
 
   openFile: (path: string, options?: { heading?: string; line?: number; newTab?: boolean }) => void;
   closeTab: (path: string) => void;
+  /** Close every tab and clear navigation history (used when switching vaults). */
+  closeAllTabs: () => void;
   closeOtherTabs: (path: string) => void;
   setActiveTab: (path: string) => void;
   /** Called by the vault layer when a file is renamed so tabs follow it. */
@@ -61,6 +67,8 @@ export interface WorkspaceState {
   goBack: () => void;
   goForward: () => void;
   setFontSize: (px: number) => void;
+  setReadableLineLength: (enabled: boolean) => void;
+  setVaultLabel: (label: string) => void;
   setReady: (ready: boolean) => void;
 }
 
@@ -85,6 +93,8 @@ export const useWorkspace = create<WorkspaceState>()(
       history: [],
       historyIndex: -1,
       fontSize: 16,
+      readableLineLength: true,
+      vaultLabel: 'Browser storage',
       ready: false,
 
       openFile: (path, options = {}) =>
@@ -114,6 +124,8 @@ export const useWorkspace = create<WorkspaceState>()(
           if (active === path) active = tabs[Math.min(i, tabs.length - 1)] ?? null;
           return { openTabs: tabs, activeFile: active };
         }),
+
+      closeAllTabs: () => set({ openTabs: [], activeFile: null, history: [], historyIndex: -1, viewModes: {}, graphOpen: false, pendingNavigation: null }),
 
       closeOtherTabs: (path) => set({ openTabs: [path], activeFile: path }),
 
@@ -194,6 +206,8 @@ export const useWorkspace = create<WorkspaceState>()(
         }),
 
       setFontSize: (fontSize) => set({ fontSize: Math.max(10, Math.min(32, fontSize)) }),
+      setReadableLineLength: (readableLineLength) => set({ readableLineLength }),
+      setVaultLabel: (vaultLabel) => set({ vaultLabel }),
       setReady: (ready) => set({ ready }),
     }),
     {
@@ -209,6 +223,7 @@ export const useWorkspace = create<WorkspaceState>()(
         rightTab: s.rightTab,
         theme: s.theme,
         fontSize: s.fontSize,
+        readableLineLength: s.readableLineLength,
       }),
     },
   ),

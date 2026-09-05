@@ -1,0 +1,326 @@
+/*
+ * Settings dialog: left navigation of sections, scrollable content on the right (Obsidian layout).
+ * The compound selectors outrank the generic `.modal` rules from theme.css regardless of import order.
+ */
+
+.modal-backdrop.settings-backdrop {
+  padding-top: 7vh;
+}
+
+.modal.settings-modal {
+  width: min(720px, 94vw);
+  height: min(600px, 82vh);
+  max-height: 82vh;
+  flex-direction: row;
+}
+
+.settings-nav {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 2px;
+  width: 168px;
+  padding: 12px 8px;
+  border-right: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  overflow-y: auto;
+}
+.settings-nav-title {
+  padding: 4px 10px 8px;
+  font-size: var(--font-ui-smaller);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.settings-nav-item {
+  padding: 5px 10px;
+  border: none;
+  border-radius: var(--radius-s);
+  background: transparent;
+  color: var(--text-muted);
+  text-align: left;
+  cursor: pointer;
+}
+.settings-nav-item:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+.settings-nav-item.is-active {
+  background: var(--background-modifier-active);
+  color: var(--text-normal);
+}
+
+.settings-content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--background-primary);
+}
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 12px 6px 24px;
+}
+.settings-header h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+.settings-body {
+  flex: 1;
+  min-height: 0;
+  padding: 0 24px 16px;
+  overflow-y: auto;
+}
+
+/* One setting: name and description on the left, control on the right. */
+.setting-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 14px 0;
+  border-top: 1px solid var(--background-modifier-border);
+}
+.setting-item:first-child {
+  border-top: none;
+}
+.setting-item.mod-stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+.setting-item-info {
+  min-width: 0;
+}
+.setting-item-name {
+  font-size: var(--font-ui-small);
+  color: var(--text-normal);
+}
+.setting-item-description {
+  margin-top: 3px;
+  font-size: var(--font-ui-smaller);
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+.setting-item-control {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+.mod-stacked .setting-item-control {
+  align-items: stretch;
+}
+
+.settings-button {
+  display: inline-block;
+  padding: 5px 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  background: var(--background-secondary);
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+  line-height: 1.4;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.settings-button:hover {
+  background: var(--background-modifier-hover);
+}
+.settings-button:disabled,
+.settings-button.is-disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* A file picker that looks like a button; the input stays focusable but invisible. */
+.settings-file-button {
+  position: relative;
+}
+.settings-file-button input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+.settings-file-button:focus-within {
+  border-color: var(--interactive-accent);
+}
+
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  overflow: hidden;
+}
+.segmented button {
+  padding: 4px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  cursor: pointer;
+}
+.segmented button + button {
+  border-left: 1px solid var(--background-modifier-border);
+}
+.segmented button:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+.segmented button.is-active {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+/* Obsidian-style toggle switch. */
+.checkbox-container {
+  position: relative;
+  flex: none;
+  width: 40px;
+  height: 22px;
+  border-radius: 11px;
+  background: var(--background-modifier-border);
+  cursor: pointer;
+  transition: background var(--transition);
+}
+.checkbox-container::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  transition: transform var(--transition);
+}
+.checkbox-container.is-enabled {
+  background: var(--interactive-accent);
+}
+.checkbox-container.is-enabled::after {
+  transform: translateX(18px);
+}
+.checkbox-container:focus-within {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: 2px;
+}
+.checkbox-container input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.settings-range {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.settings-range input[type='range'] {
+  width: 160px;
+  accent-color: var(--interactive-accent);
+}
+.settings-value {
+  min-width: 40px;
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  text-align: right;
+}
+
+.settings-vault-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-normal);
+}
+.settings-status {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
+.settings-status.is-error {
+  color: var(--text-error);
+}
+.settings-import {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-filter {
+  margin: 4px 0 12px;
+}
+.hotkeys-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-ui-small);
+}
+.hotkeys-table th,
+.hotkeys-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  text-align: left;
+}
+.hotkeys-table th {
+  font-size: var(--font-ui-smaller);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.hotkeys-table td:last-child {
+  width: 160px;
+}
+.hotkey-key {
+  display: inline-block;
+  padding: 1px 6px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 3px;
+  background: var(--background-secondary);
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
+.hotkey-blank,
+.hotkey-empty {
+  color: var(--text-faint);
+}
+
+.settings-about-name {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 8px 0 4px;
+}
+.settings-about p {
+  margin: 0 0 16px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+.settings-about ul {
+  margin: 6px 0 0;
+  padding-left: 20px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+.settings-about code {
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: var(--code-bg);
+  font-family: var(--font-monospace);
+  font-size: 0.9em;
+}
