@@ -1,0 +1,195 @@
+.file-explorer {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.explorer-header {
+  padding: 4px 8px;
+}
+.explorer-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.explorer-actions .clickable-icon {
+  width: 26px;
+  height: 26px;
+}
+.explorer-actions .clickable-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.explorer-tree {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 2px 6px 24px;
+  outline: none;
+  border-radius: var(--radius-s);
+}
+.explorer-tree.is-drop-target {
+  box-shadow: inset 0 0 0 1px var(--interactive-accent);
+}
+
+/* Rows */
+.explorer-row {
+  height: 24px;
+  padding: 0 6px 0 calc(6px + var(--depth, 0) * 16px);
+  gap: 2px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+.explorer-row:hover,
+.explorer-row.is-active {
+  color: var(--text-normal);
+}
+.explorer-row.is-folder {
+  font-weight: 600;
+}
+.explorer-tree:focus .explorer-row.is-focused {
+  background: var(--background-modifier-hover);
+}
+.explorer-tree:focus .explorer-row.is-focused.is-active {
+  background: var(--background-modifier-active);
+}
+.explorer-row.is-drop-target {
+  outline: 1px solid var(--interactive-accent);
+  outline-offset: -1px;
+  background: var(--background-modifier-hover);
+}
+
+.explorer-chevron {
+  flex: 0 0 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: var(--text-faint);
+}
+.explorer-chevron svg {
+  width: 16px;
+  height: 16px;
+}
+
+.explorer-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.explorer-name.is-muted {
+  color: var(--text-faint);
+  font-weight: normal;
+}
+
+/* Inline rename */
+.explorer-row.is-renaming {
+  height: auto;
+  min-height: 24px;
+  padding-top: 2px;
+  padding-bottom: 2px;
+  background: transparent;
+  cursor: default;
+  font-weight: normal;
+}
+.rename-box {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.rename-input {
+  width: 100%;
+  height: 20px;
+  padding: 0 4px;
+  border: 1px solid var(--interactive-accent);
+  border-radius: var(--radius-s);
+  background: var(--background-modifier-form-field);
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+  outline: none;
+}
+.rename-error {
+  color: var(--text-error);
+  font-size: var(--font-ui-smaller);
+  line-height: 1.3;
+  white-space: normal;
+}
+
+/* Empty vault */
+.explorer-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 32px 16px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* Transient notice */
+.explorer-notice {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  background: var(--background-secondary-alt);
+  color: var(--text-normal);
+  font-size: var(--font-ui-smaller);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Context menu */
+.menu {
+  position: fixed;
+  z-index: 200;
+  min-width: 180px;
+  padding: 4px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  background: var(--background-secondary);
+  color: var(--text-normal);
+  box-shadow: var(--shadow);
+  font-size: var(--font-ui-small);
+}
+.menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  padding: 5px 10px;
+  border: none;
+  border-radius: var(--radius-s);
+  background: transparent;
+  color: var(--text-normal);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.menu-item:hover,
+.menu-item:focus {
+  background: var(--background-modifier-hover);
+  outline: none;
+}
+.menu-hint {
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+}
+.menu-separator {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--background-modifier-border);
+}
