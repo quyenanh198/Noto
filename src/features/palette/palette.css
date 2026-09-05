@@ -1,0 +1,92 @@
+/* Quick switcher and command palette. The base modal chrome lives in styles/theme.css. */
+
+.palette {
+  width: min(640px, 92vw);
+}
+
+.palette .modal-input {
+  font-size: 15px;
+  color: var(--text-normal);
+}
+.palette .modal-input::placeholder {
+  color: var(--text-faint);
+}
+
+.palette .modal-results {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.palette .modal-item {
+  padding: 6px 10px;
+  color: var(--text-normal);
+}
+/* Hovering moves the selection, so only the selected row is highlighted. */
+.palette .modal-item:hover {
+  background: transparent;
+}
+.palette .modal-item.is-selected {
+  background: var(--background-modifier-active);
+}
+
+.palette-item-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.palette-item-title {
+  font-size: var(--font-ui-small);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.palette-item-path {
+  color: var(--text-faint);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.palette-item-note {
+  flex: none;
+  color: var(--text-faint);
+  font-size: 12px;
+  font-style: italic;
+  white-space: nowrap;
+}
+
+.palette .modal-item.is-create {
+  font-style: italic;
+  color: var(--text-muted);
+}
+.palette .modal-item.is-create.is-selected {
+  color: var(--text-normal);
+}
+.palette-create-prefix {
+  display: inline-block;
+  margin-right: 4px;
+  font-style: normal;
+  font-weight: 600;
+  color: var(--interactive-accent);
+}
+
+.palette-divider {
+  padding: 8px 10px 3px;
+  color: var(--text-faint);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.palette-divider:not(:first-child) {
+  margin-top: 4px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.palette-empty {
+  padding: 12px 10px;
+  color: var(--text-faint);
+  font-size: var(--font-ui-small);
+}
