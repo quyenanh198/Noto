@@ -1,0 +1,145 @@
+/* Absolutely positioned inside .view-content so tall notes never inflate the app grid; the editor scrolls itself. */
+.markdown-editor {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  font-family: var(--font-text);
+  font-size: var(--font-size);
+  line-height: var(--line-height);
+  color: var(--text-normal);
+}
+
+.markdown-editor .editor-sizer {
+  max-width: var(--editor-max-width);
+  margin: 0 auto;
+  padding: 28px 32px 40vh;
+}
+
+.inline-title {
+  display: block;
+  width: 100%;
+  margin: 0 0 14px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-normal);
+  font-family: var(--font-text);
+  font-size: 1.8em;
+  font-weight: 700;
+  line-height: 1.3;
+  outline: none;
+}
+.inline-title::placeholder {
+  color: var(--text-faint);
+}
+.inline-title-error {
+  margin: -8px 0 12px;
+  color: var(--text-error);
+  font-family: var(--font-interface);
+  font-size: var(--font-ui-smaller);
+}
+
+.markdown-editor .cm-editor {
+  height: auto;
+}
+
+/* Headings get a little breathing room above, like Obsidian. */
+.markdown-editor .cm-heading-line {
+  padding-top: 0.5em;
+}
+.markdown-editor .cm-heading-line.cm-heading-1 {
+  padding-top: 0.7em;
+}
+
+.markdown-editor .cm-wikilink {
+  color: var(--link-color);
+}
+.markdown-editor .cm-wikilink:hover {
+  text-decoration: underline;
+}
+.markdown-editor .cm-line:not(.cm-activeLine) .cm-wikilink {
+  cursor: pointer;
+}
+.markdown-editor .cm-wikilink-unresolved {
+  color: var(--link-unresolved);
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+
+.markdown-editor .cm-hashtag {
+  padding: 0 8px;
+  border-radius: 12px;
+  background: var(--tag-bg);
+  color: var(--tag-color);
+  font-size: 0.9em;
+}
+.markdown-editor .cm-line:not(.cm-activeLine) .cm-hashtag {
+  cursor: pointer;
+}
+
+.markdown-editor .cm-highlight {
+  background: var(--text-highlight-bg);
+  border-radius: 2px;
+}
+
+.markdown-editor .cm-inline-code {
+  font-family: var(--font-monospace);
+  font-size: 0.9em;
+  background: var(--code-bg);
+  border-radius: 3px;
+}
+
+.markdown-editor .cm-codeblock-line {
+  padding: 0 14px;
+  background: var(--code-bg);
+  font-family: var(--font-monospace);
+  font-size: 0.9em;
+}
+.markdown-editor .cm-codeblock-line .cm-inline-code {
+  background: transparent;
+  font-size: inherit;
+}
+.markdown-editor .cm-codeblock-start {
+  padding-top: 6px;
+  border-radius: var(--radius-s) var(--radius-s) 0 0;
+}
+.markdown-editor .cm-codeblock-end {
+  padding-bottom: 6px;
+  border-radius: 0 0 var(--radius-s) var(--radius-s);
+}
+
+.markdown-editor .cm-frontmatter-line {
+  padding-left: 12px;
+  border-left: 3px solid var(--background-modifier-border);
+  font-family: var(--font-monospace);
+  font-size: 0.85em;
+}
+
+.markdown-editor .cm-quote-line {
+  padding-left: 14px;
+  border-left: 3px solid var(--interactive-accent);
+  color: var(--text-muted);
+}
+
+.markdown-editor .cm-hr {
+  display: inline-block;
+  width: 100%;
+  height: 0;
+  margin: 0.6em 0;
+  border-top: 1px solid var(--background-modifier-border);
+  vertical-align: middle;
+}
+
+.markdown-editor .cm-task-checkbox {
+  width: 1em;
+  height: 1em;
+  margin: 0 6px 0 0;
+  vertical-align: -0.1em;
+  accent-color: var(--interactive-accent);
+  cursor: pointer;
+}
+.markdown-editor .cm-task-done {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
