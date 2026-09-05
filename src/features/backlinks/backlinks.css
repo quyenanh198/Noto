@@ -1,0 +1,131 @@
+.backlinks-pane {
+  padding: 0 4px 8px;
+}
+
+.backlinks-count {
+  display: inline-block;
+  min-width: 18px;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: var(--background-modifier-border);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 16px;
+  text-align: center;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.backlinks-toggle {
+  cursor: pointer;
+  border-radius: var(--radius-s);
+  margin-top: 8px;
+  padding-left: 6px;
+}
+.backlinks-toggle:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+.backlinks-toggle-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.backlinks-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+.backlinks-chevron:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+.backlinks-chevron svg {
+  width: 14px;
+  height: 14px;
+}
+
+.backlink-group {
+  margin-bottom: 2px;
+}
+
+.backlink-group-title {
+  height: 24px;
+  padding: 0 8px 0 4px;
+  gap: 6px;
+}
+.backlink-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-normal);
+}
+.backlink-folder {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+}
+.backlink-group-title .backlinks-count {
+  margin-left: auto;
+}
+
+.backlink-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 2px 0 2px 22px;
+  padding: 4px 8px;
+  border-radius: var(--radius-s);
+  background: var(--background-primary);
+  cursor: pointer;
+}
+.backlink-item:hover {
+  background: var(--background-modifier-hover);
+}
+
+.backlink-snippet {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-ui-smaller);
+  line-height: 1.4;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.backlink-highlight {
+  padding: 0 1px;
+  border-radius: 2px;
+  background: var(--text-highlight-bg);
+  color: var(--text-normal);
+}
+
+.backlink-link-button {
+  flex: none;
+  padding: 1px 8px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  background: var(--background-secondary);
+  color: var(--text-muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+.backlink-link-button:hover {
+  background: var(--interactive-accent);
+  border-color: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
