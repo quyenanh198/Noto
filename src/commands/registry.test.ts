@@ -37,4 +37,21 @@ describe('CommandRegistry', () => {
     expect(reg.handleKeydown(new KeyboardEvent('keydown', { key: 'b', ctrlKey: true }))).toBe(false);
     expect(calls).toEqual(['a', 'b', 'b']);
   });
+
+  it('leaves events another handler already consumed alone', () => {
+    const reg = new CommandRegistry();
+    let ran = false;
+    reg.register({
+      id: 'x',
+      name: 'X',
+      hotkey: 'Mod+X',
+      callback: () => {
+        ran = true;
+      },
+    });
+    const e = new KeyboardEvent('keydown', { key: 'x', ctrlKey: true, cancelable: true });
+    e.preventDefault();
+    expect(reg.handleKeydown(e)).toBe(false);
+    expect(ran).toBe(false);
+  });
 });

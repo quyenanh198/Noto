@@ -61,6 +61,68 @@ describe('workspace store', () => {
     expect(s().getViewMode('z.md')).toBe('source');
   });
 
+  it('remaps tabs, history and view modes under a renamed folder', () => {
+    const s = () => useWorkspace.getState();
+    s().openFile('Projects/a.md', { newTab: true });
+    s().openFile('Projects/sub/b.md', { newTab: true });
+    s().openFile('Other/c.md', { newTab: true });
+    s().setViewMode('Projects/a.md', 'preview');
+    s().setActiveTab('Projects/sub/b.md');
+    s().folderRenamed('Projects', 'Work');
+    expect(s().openTabs).toEqual(['Work/a.md', 'Work/sub/b.md', 'Other/c.md']);
+    expect(s().activeFile).toBe('Work/sub/b.md');
+    expect(s().history).toEqual(['Work/a.md', 'Work/sub/b.md', 'Other/c.md']);
+    expect(s().getViewMode('Work/a.md')).toBe('preview');
+    expect(s().getViewMode('Projects/a.md')).toBe('source');
+  });
+
+  it('prunes deleted files from history so back/forward cannot resurrect them', () => {
+    const s = () => useWorkspace.getState();
+    s().openFile('a.md');
+    s().openFile('b.md');
+    s().fileDeleted('b.md');
+    expect(s().history).toEqual(['a.md']);
+    expect(s().activeFile).toBeNull();
+    // Deleting the current note leaves the workspace empty, but Back still returns to the note before it.
+    s().goBack();
+    expect(s().activeFile).toBe('a.md');
+    s().goForward();
+    expect(s().activeFile).toBe('a.md');
+    expect(s().openTabs).toEqual(['a.md']);
+
+    s().openFile('b.md', { newTab: true });
+    s().openFile('c.md', { newTab: true });
+    s().fileDeleted('b.md');
+    expect(s().history).toEqual(['a.md', 'c.md']);
+    expect(s().historyIndex).toBe(1);
+    s().goBack();
+    expect(s().activeFile).toBe('a.md');
+    expect(s().openTabs).toEqual(['a.md', 'c.md']);
+  });
+
+  it('ignores the view mode toggle while the graph is open', () => {
+    const s = () => useWorkspace.getState();
+    s().openFile('a.md');
+    s().setGraphOpen(true);
+    s().toggleViewMode();
+    expect(s().viewModes).toEqual({});
+    s().setGraphOpen(false);
+    s().toggleViewMode();
+    expect(s().getViewMode('a.md')).toBe('preview');
+  });
+
+  it('focusSearch opens the search pane and bumps the focus request', () => {
+    const s = () => useWorkspace.getState();
+    useWorkspace.setState({ leftSidebarOpen: false, leftTab: 'files' });
+    const before = s().searchFocusRequest;
+    s().focusSearch();
+    expect(s().leftTab).toBe('search');
+    expect(s().leftSidebarOpen).toBe(true);
+    expect(s().searchFocusRequest).toBe(before + 1);
+    s().focusSearch();
+    expect(s().searchFocusRequest).toBe(before + 2);
+  });
+
   it('stores navigation targets until consumed', () => {
     const s = () => useWorkspace.getState();
     s().openFile('a.md', { heading: 'H' });

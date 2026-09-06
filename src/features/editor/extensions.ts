@@ -4,7 +4,7 @@ import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { bracketMatching, syntaxHighlighting } from '@codemirror/language';
 import { languages } from '@codemirror/language-data';
 import { search, searchKeymap } from '@codemirror/search';
-import type { Extension } from '@codemirror/state';
+import { type Compartment, type Extension } from '@codemirror/state';
 import { drawSelection, EditorView, highlightActiveLine, type KeyBinding, keymap, placeholder } from '@codemirror/view';
 import { IS_MAC, normalizeHotkey } from '../../commands/registry';
 import { type CompletionDeps, createCompletionSources } from './completion';
@@ -43,10 +43,24 @@ export interface EditorExtensionOptions {
   completion: CompletionDeps;
   preview: LivePreviewHandlers;
   onDocChanged: (doc: string) => void;
+  /** Wraps the handler-bound extensions so a state kept from an earlier mount can be re-pointed at a new one. */
+  dynamic?: Compartment;
+}
+
+/** The extensions that close over one mount's handlers: completion sources, live-preview clicks, change reporting. */
+export function mountExtensions(options: Pick<EditorExtensionOptions, 'completion' | 'preview' | 'onDocChanged'>): Extension[] {
+  return [
+    autocompletion({ activateOnTyping: true, override: createCompletionSources(options.completion), icons: false }),
+    livePreview(options.preview),
+    EditorView.updateListener.of((update) => {
+      if (update.docChanged) options.onDocChanged(update.state.doc.toString());
+    }),
+  ];
 }
 
 export function createEditorExtensions(options: EditorExtensionOptions): Extension[] {
   const reserved = new Set(options.reservedHotkeys.map(normalizeHotkey));
+  const bound = mountExtensions(options);
   return [
     history(),
     markdown({ base: markdownLanguage, codeLanguages: languages, extensions: [frontmatter], addKeymap: true, completeHTMLTags: false }),
@@ -58,7 +72,7 @@ export function createEditorExtensions(options: EditorExtensionOptions): Extensi
     bracketMatching(),
     closeBrackets(),
     placeholder('Start writing…'),
-    autocompletion({ activateOnTyping: true, override: createCompletionSources(options.completion), icons: false }),
+    options.dynamic ? options.dynamic.of(bound) : bound,
     search({ top: true }),
     keymap.of([
       ...closeBracketsKeymap,
@@ -67,9 +81,5 @@ export function createEditorExtensions(options: EditorExtensionOptions): Extensi
       ...withoutReserved(searchKeymap, reserved),
       indentWithTab,
     ]),
-    livePreview(options.preview),
-    EditorView.updateListener.of((update) => {
-      if (update.docChanged) options.onDocChanged(update.state.doc.toString());
-    }),
   ];
 }

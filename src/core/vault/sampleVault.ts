@@ -15,7 +15,7 @@ Noto is a local-first, markdown knowledge base in the spirit of Obsidian. Your n
 
 ## Get started
 
-- Press **Ctrl/Cmd+N** to create a new note.
+- Press **Ctrl/Cmd+Alt+N** to create a new note.
 - Type \`[[\` to link to another note, for example [[Linking notes]].
 - Press **Ctrl/Cmd+O** to quickly open any note, **Ctrl/Cmd+P** for the command palette.
 - Press **Ctrl/Cmd+E** to switch between editing and reading view.

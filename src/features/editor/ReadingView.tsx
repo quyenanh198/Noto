@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, type MouseEvent } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, type MouseEvent } from 'react';
 import { app } from '../../app';
 import { openLink } from '../../commands/coreCommands';
 import { renderMarkdown, slugify, toggleTaskLine } from '../../core/markdown/render';
 import { noteTitle } from '../../core/vault/path';
 import { useVaultRevision } from '../../state/hooks';
 import { useWorkspace, type NavigationTarget } from '../../state/store';
+import { rememberLine, takeLine } from './viewMemory';
 import './reading.css';
 
 export interface ReadingViewProps {
@@ -33,6 +34,19 @@ export function ReadingView({ path }: ReadingViewProps) {
     if (!nav || !root) return;
     findNavigationTarget(root, nav)?.scrollIntoView({ block: 'start' });
   }, [pending, path]);
+
+  // Start where the editor (or this view, before a tab switch) was, unless a navigation target is pending;
+  // on the way out record the top line for the next view. Layout timing: the DOM must still be measurable.
+  useLayoutEffect(() => {
+    const root = contentRef.current;
+    const line = takeLine(path);
+    if (root && line && useWorkspace.getState().pendingNavigation?.path !== path) {
+      findNavigationTarget(root, { path, line: line.line })?.scrollIntoView({ block: 'start' });
+    }
+    return () => {
+      if (root && useWorkspace.getState().openTabs.includes(path)) rememberLine(path, topVisibleLine(root), 'reading');
+    };
+  }, [path]);
 
   const onClick = (e: MouseEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement;
@@ -88,6 +102,18 @@ function toggleTask(checkbox: HTMLInputElement, hostPath: string): void {
 }
 
 const isEmbedded = (el: Element) => el.closest('.markdown-embed') !== null;
+
+/** Source line of the last block starting at or above the scroll container's top edge (0 when scrolled to the top). */
+function topVisibleLine(root: HTMLElement): number {
+  const scroller = root.closest('.markdown-reading-view') ?? root;
+  const edge = scroller.getBoundingClientRect().top + 1;
+  let best = 0;
+  for (const el of root.querySelectorAll<HTMLElement>('[data-line]')) {
+    const line = Number(el.dataset.line);
+    if (line > best && !isEmbedded(el) && el.getBoundingClientRect().top <= edge) best = line;
+  }
+  return best;
+}
 
 /** Element to scroll to for a heading or line target; elements inside embeds are ignored. */
 export function findNavigationTarget(root: HTMLElement, nav: NavigationTarget): Element | null {

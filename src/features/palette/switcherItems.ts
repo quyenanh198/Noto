@@ -1,5 +1,5 @@
 import { fuzzyFilter } from '../../core/search/fuzzy';
-import { dirname, noteTitle, withMdExt } from '../../core/vault/path';
+import { dirname, noteTitle, validateNotePath, withMdExt } from '../../core/vault/path';
 
 export type SwitcherItem =
   | { kind: 'note'; path: string; title: string }
@@ -63,6 +63,6 @@ export function switcherRows(query: string, src: SwitcherSource): SwitcherRow[] 
   }));
   const lower = q.toLowerCase();
   const taken = candidates.some((c) => c.title.toLowerCase() === lower);
-  if (!taken) rows.push({ item: { kind: 'create', name: q, path: withMdExt(q) }, indices: [], field: 0 });
+  if (!taken && validateNotePath(q) === null) rows.push({ item: { kind: 'create', name: q, path: withMdExt(q) }, indices: [], field: 0 });
   return rows;
 }

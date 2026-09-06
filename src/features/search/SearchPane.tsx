@@ -33,6 +33,7 @@ function open(entry: Entry, newTab: boolean): void {
 export function SearchPane() {
   const query = useWorkspace((s) => s.searchQuery);
   const setSearchQuery = useWorkspace((s) => s.setSearchQuery);
+  const focusRequest = useWorkspace((s) => s.searchFocusRequest);
   const vaultRev = useVaultRevision();
   const indexRev = useIndexRevision();
   const [matchCase, setMatchCase] = useState(false);
@@ -45,9 +46,12 @@ export function SearchPane() {
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
+  // On mount and whenever the search command asks for the box again (Ctrl+Shift+F while the pane is already showing).
   useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
+    const input = inputRef.current;
+    input?.focus();
+    input?.select();
+  }, [focusRequest]);
 
   // Other panes push queries into the store (e.g. "search for tag"); land the user in the box.
   useEffect(() => {

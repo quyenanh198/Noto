@@ -53,6 +53,11 @@ describe('switcherRows', () => {
     expect(titles('Brand new note')).toEqual(['+Brand new note']);
   });
 
+  it('does not offer to create notes with empty or invalid names', () => {
+    for (const q of ['/', '..', '.', 'a:b']) expect(titles(q).some((t) => t.startsWith('+'))).toBe(false);
+    expect(titles('Folder/New note')).toContain('+Folder/New note');
+  });
+
   it('includes unresolved targets in fuzzy results', () => {
     const rows = switcherRows('inbox', src);
     expect(rows[0].item).toEqual({ kind: 'unresolved', target: 'Ideas inbox', title: 'Ideas inbox' });
