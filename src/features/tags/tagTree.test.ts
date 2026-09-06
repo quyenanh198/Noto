@@ -32,6 +32,15 @@ describe('buildTagTree', () => {
     expect(tree[0].count).toBe(1);
   });
 
+  it('merges case variants of a tag into one node, keeping the first-seen casing', () => {
+    const tree = buildTagTree([
+      { name: 'Project/Alpha', count: 1 },
+      { name: 'project/alpha', count: 1 },
+      { name: 'project/noto', count: 1 },
+    ]);
+    expect(shape(tree)).toEqual([['Project', 3, [['Project/Alpha', 2, []], ['project/noto', 1, []]]]]);
+  });
+
   it('ignores empty segments and names', () => {
     const tree = buildTagTree([{ name: 'a//b', count: 1 }, { name: '', count: 1 }]);
     expect(shape(tree)).toEqual([['a', 1, [['a/b', 1, []]]]]);

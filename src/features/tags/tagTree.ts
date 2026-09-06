@@ -17,13 +17,14 @@ export type TagSort = 'name' | 'count';
  */
 export function buildTagTree(tags: Array<{ name: string; count: number }>, countFor?: (tag: string) => number): TagNode[] {
   const roots: TagNode[] = [];
+  // Tags are case-insensitive: case variants fold into one node that keeps the first-seen casing.
   const byTag = new Map<string, TagNode>();
   const ensure = (tag: string): TagNode => {
-    const existing = byTag.get(tag);
+    const existing = byTag.get(tag.toLowerCase());
     if (existing) return existing;
     const slash = tag.lastIndexOf('/');
     const node: TagNode = { name: slash === -1 ? tag : tag.slice(slash + 1), tag, count: 0, children: [] };
-    byTag.set(tag, node);
+    byTag.set(tag.toLowerCase(), node);
     (slash === -1 ? roots : ensure(tag.slice(0, slash)).children).push(node);
     return node;
   };
