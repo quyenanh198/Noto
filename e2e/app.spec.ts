@@ -60,6 +60,56 @@ test.describe('file explorer', () => {
     await expect(renamed).toBeHidden();
     await expect(page.getByTestId('view-title')).not.toHaveText('My renamed note.md');
   });
+
+  test('keeps keyboard focus in the tree after opening a note', async ({ page }) => {
+    await openApp(page);
+    const dialogs: string[] = [];
+    page.on('dialog', (d) => {
+      dialogs.push(d.message());
+      void d.dismiss();
+    });
+    const tree = page.locator('.explorer-tree');
+    const focusedRow = page.locator('.explorer-row.is-focused');
+    const content = page.locator('.cm-content');
+    await page.locator('[data-testid="explorer-item"][data-path="Markdown syntax.md"]').click();
+    await expect(page.getByTestId('view-title')).toHaveText('Markdown syntax.md');
+    await expect(tree).toBeFocused();
+    const text = await content.innerText();
+    await page.keyboard.press('Delete');
+    await expect.poll(() => dialogs).toEqual(['Delete "Markdown syntax.md"?']);
+    expect(await content.innerText()).toBe(text);
+    await page.keyboard.press('ArrowDown');
+    await expect(focusedRow).toHaveAttribute('data-path', 'Welcome.md');
+    await page.keyboard.press('Enter');
+    await expect(page.getByTestId('view-title')).toHaveText('Welcome.md');
+    await expect(tree).toBeFocused();
+    await page.keyboard.press('ArrowUp');
+    await expect(focusedRow).toHaveAttribute('data-path', 'Markdown syntax.md');
+    await page.keyboard.press('F2');
+    await expect(page.getByTestId('explorer-rename-input')).toBeVisible();
+  });
+
+  test('expanded folders follow a folder rename', async ({ page }) => {
+    await openApp(page);
+    const item = (path: string) => page.locator(`[data-testid="explorer-item"][data-path="${path}"]`);
+    const input = page.getByTestId('explorer-rename-input');
+    await item('Projects').click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'New folder' }).click();
+    await input.fill('Sub');
+    await input.press('Enter');
+    await item('Projects/Sub').click();
+    await expect(item('Projects')).toHaveAttribute('aria-expanded', 'true');
+    await expect(item('Projects/Sub')).toHaveAttribute('aria-expanded', 'true');
+    await item('Projects').click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Rename' }).click();
+    await input.fill('Work');
+    await input.press('Enter');
+    await expect(item('Work')).toHaveAttribute('aria-expanded', 'true');
+    await expect(item('Work/Sub')).toHaveAttribute('aria-expanded', 'true');
+    await expect
+      .poll(() => page.evaluate(() => (JSON.parse(localStorage.getItem('noto-explorer-expanded') ?? '[]') as string[]).sort()))
+      .toEqual(['Work', 'Work/Sub']);
+  });
 });
 
 test.describe('editor', () => {

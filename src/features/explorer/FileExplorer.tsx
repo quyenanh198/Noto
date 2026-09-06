@@ -14,6 +14,8 @@ import {
   flattenTree,
   moveDestination,
   navigate,
+  rekeyExpanded,
+  removeExpanded,
   renameTarget,
   uniqueFolderPath,
   type NavKey,
@@ -34,9 +36,10 @@ function loadExpanded(): ReadonlySet<string> {
   }
 }
 
-function saveExpanded(expanded: ReadonlySet<string>): void {
+/** Persists the expanded folders, keeping only those that still exist so renamed, moved or deleted ones do not linger. */
+function saveExpanded(expanded: ReadonlySet<string>, folders: readonly string[]): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify([...expanded]));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(folders.filter((p) => expanded.has(p))));
   } catch {
     // Storage may be unavailable; expansion state is a convenience only.
   }
@@ -66,6 +69,8 @@ export function FileExplorer() {
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  /** Bumped when a file is opened from the tree while it owns the keyboard, so the tree takes focus back from the editor. */
+  const [focusRequest, setFocusRequest] = useState(0);
 
   const treeRef = useRef<HTMLDivElement>(null);
   /** Row to scroll into view after the next render. */
@@ -76,7 +81,7 @@ export function FileExplorer() {
   const rows = useMemo(() => flattenTree(tree, expanded), [tree, expanded]);
   const anyExpanded = folderPaths.some((p) => expanded.has(p));
 
-  useEffect(() => saveExpanded(expanded), [expanded]);
+  useEffect(() => saveExpanded(expanded, folderPaths), [expanded, folderPaths]);
 
   useEffect(() => {
     if (!activeFile) return;
@@ -94,6 +99,14 @@ export function FileExplorer() {
       revealRef.current = null;
     }
   });
+
+  useEffect(() => {
+    if (!focusRequest) return;
+    // The editor focuses itself in its mount effect, which runs in the same effect pass as this one (the request is
+    // batched with the file switch); take the focus back once the pass is over.
+    const tree = treeRef.current;
+    queueMicrotask(() => tree?.focus({ preventScroll: true }));
+  }, [focusRequest]);
 
   useEffect(() => () => window.clearTimeout(noticeTimer.current), []);
 
@@ -125,8 +138,13 @@ export function FileExplorer() {
   };
 
   const openNode = (node: TreeNode, newTab = false) => {
-    if (node.kind === 'folder') setFolderOpen(node.path);
-    else useWorkspace.getState().openFile(node.path, { newTab });
+    if (node.kind === 'folder') {
+      setFolderOpen(node.path);
+      return;
+    }
+    // Opening from the tree keeps the keyboard here, like Obsidian, so arrows/F2/Delete keep working on the list.
+    if (treeRef.current?.contains(document.activeElement)) setFocusRequest((n) => n + 1);
+    useWorkspace.getState().openFile(node.path, { newTab });
   };
 
   const newNote = async (folder?: string) => {
@@ -163,7 +181,7 @@ export function FileExplorer() {
     try {
       if (node.kind === 'folder') {
         await app.vault.renameFolder(node.path, to);
-        setExpanded((prev) => (prev.has(node.path) ? new Set([...prev, to]) : prev));
+        setExpanded((prev) => rekeyExpanded(prev, node.path, to));
       } else {
         await app.vault.rename(node.path, to);
       }
@@ -184,8 +202,12 @@ export function FileExplorer() {
     const question = node.kind === 'folder' ? `Delete folder "${node.path}" and everything inside it?` : `Delete "${node.path}"?`;
     if (!window.confirm(question)) return;
     try {
-      if (node.kind === 'folder') await app.vault.deleteFolder(node.path);
-      else await app.vault.delete(node.path);
+      if (node.kind === 'folder') {
+        await app.vault.deleteFolder(node.path);
+        setExpanded((prev) => removeExpanded(prev, node.path));
+      } else {
+        await app.vault.delete(node.path);
+      }
     } catch (e) {
       notify(errorMessage(e));
     }
@@ -205,8 +227,12 @@ export function FileExplorer() {
   const moveNode = async (node: TreeNode, targetFolder: string) => {
     const to = moveDestination(node.path, targetFolder);
     try {
-      if (node.kind === 'folder') await app.vault.renameFolder(node.path, to);
-      else await app.vault.rename(node.path, to);
+      if (node.kind === 'folder') {
+        await app.vault.renameFolder(node.path, to);
+        setExpanded((prev) => rekeyExpanded(prev, node.path, to));
+      } else {
+        await app.vault.rename(node.path, to);
+      }
       reveal(to);
     } catch (e) {
       notify(errorMessage(e));
