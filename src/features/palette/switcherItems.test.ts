@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { validateNotePath } from '../../core/vault/path';
 import { recentPaths, switcherRows } from './switcherItems';
 
 const src = {
@@ -98,7 +99,8 @@ describe('switcherRows create item', () => {
     for (const q of ['.', '..', '/', 'Projects/', 'a//b', 'Projects/../New']) {
       const last = items(q).at(-1);
       expect(last, q).toMatchObject({ kind: 'invalid', name: q });
-      expect(last && last.kind === 'invalid' ? last.reason : '', q).toBeTruthy();
+      // The reason is whatever the shared note-path rule says, so the switcher and openLink cannot drift apart again.
+      expect(last && last.kind === 'invalid' ? last.reason : '', q).toBe(validateNotePath(q));
       expect(kinds(q), q).not.toContain('create');
     }
   });
