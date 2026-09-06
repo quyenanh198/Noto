@@ -58,5 +58,5 @@ Conventions:
 ## Continuous integration and deployment
 
 - `.github/workflows/ci.yml` runs on every push and pull request: typecheck, unit tests, production build, Playwright end-to-end tests. The built web app is attached to the run as the `noto-webapp` artifact.
-- `.github/workflows/deploy.yml` builds the app on every push to `main` and publishes it to GitHub Pages at `https://quyenanh198.github.io/Noto/`. The workflow enables Pages on first run; if the deployment is rejected, set Settings → Pages → Source to "GitHub Actions" once.
+- `.github/workflows/deploy.yml` builds the app on every push to `main` and publishes it to GitHub Pages at `https://quyenanh198.github.io/Noto/`. Pages must be enabled once by hand — Settings → Pages → Source: "GitHub Actions" — because a workflow token may not create the Pages site itself; the deploy job fails with "Resource not accessible by integration" until that is done.
 - The app is served from a sub-path on Pages, so the build reads `VITE_BASE_PATH` (for example `/Noto/`); local builds default to `/`.
