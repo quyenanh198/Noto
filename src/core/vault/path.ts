@@ -57,6 +57,19 @@ export function noteTitle(path: string): string {
   return stripExt(basename(path));
 }
 
+/**
+ * The name a wikilink uses for a file: `Note.md` -> `Note`, while `Node.js`, `Release 1.2` and `notes.txt` stay
+ * as they are. Links imply only the markdown extension; `stripExt` would also cut a dotted note name short.
+ */
+export function noteKey(target: string): string {
+  return isMarkdown(target) ? target.slice(0, -3) : target;
+}
+
+/** Whether folder `dir` is `hint` or ends with `hint` on a segment boundary: `a/b` matches `b`, `ab` does not. */
+export function folderMatchesHint(dir: string, hint: string): boolean {
+  return !hint || dir === hint || dir.endsWith(`/${hint}`);
+}
+
 /** True if `child` is `parent` itself or nested under it. */
 export function isWithin(child: string, parent: string): boolean {
   if (parent === '') return true;

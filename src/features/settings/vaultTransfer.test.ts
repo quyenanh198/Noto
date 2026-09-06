@@ -30,6 +30,13 @@ describe('vaultTransfer', () => {
     expect(plan.skipped).toBe(8);
   });
 
+  it('skips files that differ only in case from earlier ones, as the vault treats them as one entry', () => {
+    const files = [{ name: 'note.md' }, { name: 'NOTE.md' }, { name: 'Existing.md' }];
+    const plan = planImport(files, (path) => path.toLowerCase() === 'existing.md');
+    expect(plan.create.map((c) => c.path)).toEqual(['note.md']);
+    expect(plan.skipped).toBe(2);
+  });
+
   it('formats the summary', () => {
     expect(importSummary(1, 0)).toBe('Imported 1 file, skipped 0');
     expect(importSummary(3, 2)).toBe('Imported 3 files, skipped 2');

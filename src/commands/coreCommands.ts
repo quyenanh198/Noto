@@ -96,8 +96,9 @@ export function registerCoreCommands(): () => void {
       hotkey: 'Mod+Shift+D',
       callback: async () => {
         const path = `Daily/${todayStamp()}.md`;
-        if (!app.vault.exists(path)) await app.vault.create(path, `# ${todayStamp()}\n\n`);
-        ws().openFile(path);
+        // The folder may be spelled differently (`daily/`): on macOS and Windows that is the same note on disk.
+        const file = app.vault.findFile(path) ?? (await app.vault.create(path, `# ${todayStamp()}\n\n`));
+        ws().openFile(file.path);
       },
     }),
     app.commands.register({

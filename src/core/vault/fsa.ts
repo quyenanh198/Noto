@@ -200,6 +200,7 @@ export class FileSystemAccessAdapter implements StorageAdapter {
     const to = normalizePath(newPath);
     if (!from || !to) throw new Error('Invalid folder path.');
     const source = await this.getDirectory(from, false);
+    await this.assertNotInside(source, from, to);
     if (await this.isSameEntry(from, to, 'directory')) {
       const tmp = temporaryPath(from);
       await this.copyTree(source, tmp);
@@ -210,6 +211,26 @@ export class FileSystemAccessAdapter implements StorageAdapter {
     }
     await this.copyTree(source, to);
     await this.deleteFolder(from);
+  }
+
+  /**
+   * Refuse a destination inside the source directory: copying a tree into itself never ends. Names that differ
+   * only in case are one directory on macOS and Windows; for any other spelling of one entry the browser is asked
+   * about every existing folder on the way to `to`. Handles are looked up directly so nothing stale is cached.
+   */
+  private async assertNotInside(source: DirectoryHandle, from: string, to: string): Promise<void> {
+    const sameEntry = from.toLowerCase() === to.toLowerCase();
+    if (!sameEntry && isWithin(to.toLowerCase(), from.toLowerCase())) throw new Error('Cannot move a folder into itself.');
+    if (!source.isSameEntry) return;
+    let dir = this.root;
+    for (const segment of to.split('/').slice(0, -1)) {
+      try {
+        dir = await dir.getDirectoryHandle(segment);
+      } catch {
+        return; // nothing beyond this point exists yet, so the source cannot be there
+      }
+      if (await source.isSameEntry(dir)) throw new Error('Cannot move a folder into itself.');
+    }
   }
 
   /**

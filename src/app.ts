@@ -1,6 +1,6 @@
 import { CommandRegistry } from './commands/registry';
 import { MetadataIndex } from './core/index/MetadataIndex';
-import { activateVault, getBrowserAdapter, isSampleVaultSeeded, loadSavedVault, markSampleVaultSeeded, vaultLabelFor } from './core/vault/vaultManager';
+import { getBrowserAdapter, isSampleVaultSeeded, loadSavedVault, markSampleVaultSeeded, vaultLabelFor } from './core/vault/vaultManager';
 import { Vault } from './core/vault/Vault';
 import { SAMPLE_VAULT } from './core/vault/sampleVault';
 import type { StorageAdapter } from './core/types';
@@ -35,11 +35,6 @@ function createApp(adapter: StorageAdapter): NotoApp {
 }
 
 export const app: NotoApp = createApp(getBrowserAdapter());
-
-/** Switch the running app to another storage backend (used by the settings modal). */
-export function switchVault(adapter: StorageAdapter): Promise<void> {
-  return activateVault(app, adapter);
-}
 
 /** Load the last-used vault (seeding the sample notes into a fresh browser vault) and attach the index. */
 export async function bootstrap(): Promise<void> {

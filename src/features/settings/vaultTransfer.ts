@@ -26,8 +26,10 @@ export function importPath(file: ImportCandidate): string {
 }
 
 /**
- * Decide which files to import; existing paths and non-text files are skipped, as are hidden paths (`.obsidian/…`,
- * `.trash/…`, `node_modules/…`): a folder vault never lists those, so `exists` cannot protect what is on disk there.
+ * Decide which files to import. Skipped: existing paths (as `exists` judges them), non-text files, hidden paths
+ * (`.obsidian/…`, `.trash/…`, `node_modules/…`) — a folder vault never lists those, so `exists` cannot protect what
+ * is on disk there — and a file differing only in case from an earlier one, since the vault (like macOS and Windows)
+ * treats such names as one entry.
  */
 export function planImport<T extends ImportCandidate>(files: Iterable<T>, exists: (path: string) => boolean): ImportPlan<T> {
   const create: Array<{ file: T; path: string }> = [];
@@ -35,11 +37,11 @@ export function planImport<T extends ImportCandidate>(files: Iterable<T>, exists
   let skipped = 0;
   for (const file of files) {
     const path = importPath(file);
-    if (!path || !isTextFile(path) || hasHiddenSegment(path) || exists(path) || taken.has(path)) {
+    if (!path || !isTextFile(path) || hasHiddenSegment(path) || exists(path) || taken.has(path.toLowerCase())) {
       skipped++;
       continue;
     }
-    taken.add(path);
+    taken.add(path.toLowerCase());
     create.push({ file, path });
   }
   return { create, skipped };
