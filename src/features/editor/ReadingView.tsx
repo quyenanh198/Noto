@@ -17,6 +17,7 @@ export interface ReadingViewProps {
 export function ReadingView({ path }: ReadingViewProps) {
   const revision = useVaultRevision();
   const pending = useWorkspace((s) => s.pendingNavigation);
+  const strictLineBreaks = useWorkspace((s) => s.strictLineBreaks);
   const contentRef = useRef<HTMLDivElement>(null);
 
   const html = useMemo(() => {
@@ -25,8 +26,9 @@ export function ReadingView({ path }: ReadingViewProps) {
       path,
       resolveLink: (target) => app.vault.resolveLink(target, path),
       getEmbedContent: (p) => app.vault.getFile(p)?.content,
+      strictLineBreaks,
     });
-  }, [path, revision]);
+  }, [path, revision, strictLineBreaks]);
 
   useEffect(() => {
     if (!pending || pending.path !== path) return;
@@ -76,11 +78,27 @@ export function ReadingView({ path }: ReadingViewProps) {
     const embed = embedTitle?.closest<HTMLElement>('.markdown-embed');
     if (embed) {
       void openLink(embed.dataset.href || path, path, { heading: embed.dataset.heading, newTab });
+      return;
     }
+    // Any other anchor (e.g. a link markdown-it rejected) must not navigate the browser away from the app.
+    if (target.closest('a') && !target.closest('a.external-link')) e.preventDefault();
+  };
+
+  /** Middle-click opens internal links in a new tab of the app; the browser would open `href="#"` in a new window. */
+  const onAuxClick = (e: MouseEvent<HTMLDivElement>) => {
+    if (e.button !== 1) return;
+    const target = e.target as HTMLElement;
+    const anchor = target.closest<HTMLElement>('a');
+    if (anchor?.classList.contains('external-link')) return;
+    const embed = target.closest<HTMLElement>('.markdown-embed-title')?.closest<HTMLElement>('.markdown-embed');
+    if (!anchor && !embed) return;
+    e.preventDefault();
+    const link = anchor?.classList.contains('internal-link') ? anchor : embed;
+    if (link) void openLink(link.dataset.href || path, path, { heading: link.dataset.heading, newTab: true });
   };
 
   return (
-    <div className="markdown-reading-view" data-testid="reading-view" onClick={onClick}>
+    <div className="markdown-reading-view" data-testid="reading-view" onClick={onClick} onAuxClick={onAuxClick}>
       <div className="markdown-preview">
         <h1 className="inline-title" data-testid="inline-title">
           {noteTitle(path)}
@@ -102,7 +120,8 @@ function toggleTask(checkbox: HTMLInputElement, hostPath: string): void {
   void app.vault.modify(file.path, toggleTaskLine(file.content, line));
 }
 
-const isEmbedded = (el: Element) => el.closest('.markdown-embed') !== null;
+/** Inside an embedded note. The embed block itself belongs to the host note (it carries the source line). */
+const isEmbedded = (el: Element) => el.parentElement?.closest('.markdown-embed') != null;
 
 /** Source line of the last block starting at or above the scroll container's top edge (0 when scrolled to the top). */
 function topVisibleLine(root: HTMLElement): number {
@@ -125,7 +144,8 @@ export function findNavigationTarget(root: HTMLElement, nav: NavigationTarget): 
     const byText = headings.find((h) => headingsMatch(h.dataset.heading ?? '', want));
     if (byText) return byText;
     const slug = slugify(nav.heading);
-    return headings.find((h) => h.id === slug) ?? null;
+    // The sanitizer drops ids that clash with document properties (`title`, `links`, ...), so also slugify the heading text.
+    return headings.find((h) => h.id === slug || slugify(h.dataset.heading ?? '') === slug) ?? null;
   }
   if (nav.line !== undefined) {
     let best: HTMLElement | null = null;

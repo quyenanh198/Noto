@@ -150,6 +150,8 @@ function EditorSection() {
   const setDefaultViewMode = useWorkspace((s) => s.setDefaultViewMode);
   const readable = useWorkspace((s) => s.readableLineLength);
   const setReadable = useWorkspace((s) => s.setReadableLineLength);
+  const strictLineBreaks = useWorkspace((s) => s.strictLineBreaks);
+  const setStrictLineBreaks = useWorkspace((s) => s.setStrictLineBreaks);
   const modes: Array<{ value: ViewMode; label: string }> = [
     { value: 'source', label: 'Source' },
     { value: 'preview', label: 'Reading' },
@@ -161,6 +163,9 @@ function EditorSection() {
       </SettingItem>
       <SettingItem name="Readable line length" description="Limit the maximum line width so long paragraphs stay easy to read.">
         <Toggle checked={readable} label="Readable line length" onChange={setReadable} />
+      </SettingItem>
+      <SettingItem name="Strict line breaks" description="In reading view, ignore single newlines and start a new line only after a blank line, as in standard markdown.">
+        <Toggle checked={strictLineBreaks} label="Strict line breaks" onChange={setStrictLineBreaks} />
       </SettingItem>
     </>
   );

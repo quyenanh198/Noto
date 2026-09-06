@@ -39,6 +39,8 @@ export interface WorkspaceState {
   fontSize: number;
   /** Cap the editor/reading width (`--editor-max-width`); when false, content spans the full pane. */
   readableLineLength: boolean;
+  /** Reading view: when true a single newline does not start a new line (Obsidian's "Strict line breaks", off by default). */
+  strictLineBreaks: boolean;
   /** Human-readable name of the current vault ('Browser storage' or the folder name). */
   vaultLabel: string;
   /** Set true once the vault has loaded. */
@@ -75,6 +77,7 @@ export interface WorkspaceState {
   goForward: () => void;
   setFontSize: (px: number) => void;
   setReadableLineLength: (enabled: boolean) => void;
+  setStrictLineBreaks: (enabled: boolean) => void;
   setVaultLabel: (label: string) => void;
   setReady: (ready: boolean) => void;
 }
@@ -102,6 +105,7 @@ export const useWorkspace = create<WorkspaceState>()(
       historyIndex: -1,
       fontSize: 16,
       readableLineLength: true,
+      strictLineBreaks: false,
       vaultLabel: 'Browser storage',
       ready: false,
 
@@ -241,6 +245,7 @@ export const useWorkspace = create<WorkspaceState>()(
 
       setFontSize: (fontSize) => set({ fontSize: Math.max(10, Math.min(32, fontSize)) }),
       setReadableLineLength: (readableLineLength) => set({ readableLineLength }),
+      setStrictLineBreaks: (strictLineBreaks) => set({ strictLineBreaks }),
       setVaultLabel: (vaultLabel) => set({ vaultLabel }),
       setReady: (ready) => set({ ready }),
     }),
@@ -258,6 +263,7 @@ export const useWorkspace = create<WorkspaceState>()(
         theme: s.theme,
         fontSize: s.fontSize,
         readableLineLength: s.readableLineLength,
+        strictLineBreaks: s.strictLineBreaks,
       }),
     },
   ),

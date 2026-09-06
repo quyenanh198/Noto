@@ -11,6 +11,8 @@ export interface RenderContext {
   resolveLink: (target: string) => string | undefined;
   /** Content of a note to embed with `![[note]]`. Embeds fall back to links when this is missing. */
   getEmbedContent?: (path: string) => string | undefined;
+  /** Obsidian's "Strict line breaks": when true a single newline does not start a new line. Off by default. */
+  strictLineBreaks?: boolean;
 }
 
 /** How many levels of `![[embed]]` are rendered before falling back to a link. */
@@ -112,11 +114,15 @@ function wikilinkRule(state: StateInline, silent: boolean): boolean {
 const TAG_NAME = /[\p{L}\p{N}_\-/]+/uy;
 const TAG_BOUNDARY = /[\w#&/\\`]/;
 
-/** `#tag`, with the same rules as parseInlineTags. */
+/** markdown-it raises `linkLevel` while it tokenizes a link label; the typings omit the field. */
+type InlineState = StateInline & { linkLevel: number };
+
+/** `#tag`, with the same rules as parseInlineTags. Not inside a link label, like markdown-it's own linkify rule. */
 function tagRule(state: StateInline, silent: boolean): boolean {
   const src = state.src;
   const pos = state.pos;
   if (src.charCodeAt(pos) !== 0x23 /* # */) return false;
+  if ((state as InlineState).linkLevel > 0) return false;
   if (pos > 0 && TAG_BOUNDARY.test(src[pos - 1])) return false;
   TAG_NAME.lastIndex = pos + 1;
   const m = TAG_NAME.exec(src);
@@ -189,6 +195,7 @@ function annotateBlocks(state: StateCore): void {
   const tokens = state.tokens;
   for (let i = 0; i < tokens.length; i++) {
     const t = tokens[i];
+    if (t.type === 'paragraph_open' && tokens[i + 1]?.type === 'inline') unwrapEmbeds(t, tokens[i + 1], tokens[i + 2], env);
     if (t.map && !t.hidden && LINE_TYPES.has(t.type)) t.attrSet('data-line', String(t.map[0] + env.lineOffset));
     if (t.type === 'heading_open' && tokens[i + 1]?.type === 'inline') {
       const text = tokens[i + 1].content.trim();
@@ -215,9 +222,30 @@ function markTask(state: StateCore, item: Token, inline: Token, env: RenderEnv):
   inline.children?.unshift(box);
 }
 
+/**
+ * A paragraph holding nothing but `![[embeds]]` renders them as blocks (as Obsidian does): the embed takes over the
+ * paragraph's source line and the `<p>` is dropped, instead of being split around the block by the HTML parser.
+ */
+function unwrapEmbeds(open: Token, inline: Token, close: Token | undefined, env: RenderEnv): void {
+  const children = inline.children ?? [];
+  const embeds = children.filter((c) => c.type === 'embed');
+  if (open.hidden || embeds.length === 0 || close?.type !== 'paragraph_close') return;
+  if (!children.every((c) => c.type === 'embed' || c.type === 'softbreak' || (c.type === 'text' && c.content.trim() === ''))) return;
+  let line = (open.map?.[0] ?? 0) + env.lineOffset;
+  for (const c of children) {
+    if (c.type === 'softbreak') line++;
+    else if (c.type === 'embed') c.attrSet('data-line', String(line));
+  }
+  inline.children = embeds;
+  open.hidden = true;
+  close.hidden = true;
+}
+
 // ----- markdown-it instance -----
 
-const md = new MarkdownIt({ html: false, linkify: true, breaks: false });
+const md = new MarkdownIt({ html: false, linkify: true, breaks: true });
+// Only auto-link text that carries a scheme, as Obsidian does: `README.md`, `main.py` or `example.com` stay plain text.
+md.linkify.set({ fuzzyLink: false, fuzzyEmail: false });
 md.inline.ruler.before('link', 'wikilink', wikilinkRule);
 md.inline.ruler.before('emphasis', 'highlight', highlightTokenize);
 md.inline.ruler2.before('emphasis', 'highlight', highlightPostProcess);
@@ -235,40 +263,71 @@ function renderInternalLink(link: LinkParts, env: RenderEnv): string {
   return `<a class="${cls}" data-href="${escapeHtml(link.target)}"${heading} href="#">${escapeHtml(link.display)}</a>`;
 }
 
-function renderEmbed(link: LinkParts, env: RenderEnv): string {
-  if (IMAGE_EXT.test(link.target)) return `<span class="embed-missing">${escapeHtml(basename(link.target))}</span>`;
+/**
+ * `line` is set when the embed was unwrapped from its paragraph (see unwrapEmbeds): the block then carries the source
+ * line itself, and an inline fallback (missing note, image) gets its paragraph back.
+ */
+function renderEmbed(link: LinkParts, env: RenderEnv, line: string | null): string {
+  const inline = (html: string) => (line === null ? html : `<p data-line="${escapeHtml(line)}">${html}</p>`);
+  if (IMAGE_EXT.test(link.target)) return inline(`<span class="embed-missing">${escapeHtml(basename(link.target))}</span>`);
   const resolved = link.target === '' ? env.ctx.path : env.ctx.resolveLink(link.target);
   const content = resolved !== undefined && env.depth < MAX_EMBED_DEPTH ? env.ctx.getEmbedContent?.(resolved) : undefined;
-  if (resolved === undefined || content === undefined) return renderInternalLink(link, env);
+  if (resolved === undefined || content === undefined) return inline(renderInternalLink(link, env));
   let body = { text: content, line: 0 };
   if (link.heading !== undefined) {
     const section = extractSection(content, link.heading);
-    if (!section) return renderInternalLink(link, env);
+    if (!section) return inline(renderInternalLink(link, env));
     body = section;
   }
   const title = link.heading !== undefined ? `${noteTitle(resolved)} > ${link.heading}` : noteTitle(resolved);
   const inner = renderDocument(body.text, { ...env.ctx, path: resolved }, env.depth + 1, body.line);
   const heading = link.heading !== undefined ? ` data-heading="${escapeHtml(link.heading)}"` : '';
+  const lineAttr = line === null ? '' : ` data-line="${escapeHtml(line)}"`;
   return (
-    `<div class="markdown-embed" data-href="${escapeHtml(link.target || resolved)}"${heading}>` +
+    `<div class="markdown-embed" data-href="${escapeHtml(link.target || resolved)}"${heading}${lineAttr}>` +
     `<div class="markdown-embed-title">${escapeHtml(title)}</div>` +
     `<div class="markdown-embed-content">${inner}</div></div>`
   );
 }
 
+const EXTERNAL_HREF = /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i;
+
+/** `Note.md#Heading` (as written in `[text](...)`, percent-encoded by markdown-it) into a wikilink-style target and heading. */
+function markdownLinkParts(href: string): { target: string; heading: string | undefined } {
+  let decoded = href;
+  try {
+    decoded = decodeURIComponent(href);
+  } catch {
+    // Keep the raw href when it is not valid percent-encoding.
+  }
+  const hash = decoded.indexOf('#');
+  const target = (hash === -1 ? decoded : decoded.slice(0, hash)).trim().replace(/\.md$/i, '');
+  const heading = hash === -1 ? '' : decoded.slice(hash + 1).trim();
+  return { target, heading: heading || undefined };
+}
+
 md.renderer.rules.wikilink = (tokens, idx, _options, env) => renderInternalLink(tokens[idx].meta as LinkParts, env as RenderEnv);
-md.renderer.rules.embed = (tokens, idx, _options, env) => renderEmbed(tokens[idx].meta as LinkParts, env as RenderEnv);
+md.renderer.rules.embed = (tokens, idx, _options, env) => renderEmbed(tokens[idx].meta as LinkParts, env as RenderEnv, tokens[idx].attrGet('data-line'));
 md.renderer.rules.tag = (tokens, idx) => renderTagLink((tokens[idx].meta as { name: string }).name);
 md.renderer.rules.checkbox = (tokens, idx) => {
   const { checked, line } = tokens[idx].meta as CheckboxMeta;
   return `<input type="checkbox" class="task-list-item-checkbox" data-line="${line}"${checked ? ' checked' : ''}>`;
 };
-md.renderer.rules.link_open = (tokens, idx, options, _env, self) => {
+md.renderer.rules.link_open = (tokens, idx, options, env, self) => {
   const token = tokens[idx];
-  if (/^(https?:|mailto:)/i.test(token.attrGet('href') ?? '')) {
+  const href = token.attrGet('href') ?? '';
+  if (EXTERNAL_HREF.test(href)) {
     token.attrJoin('class', 'external-link');
     token.attrSet('target', '_blank');
     token.attrSet('rel', 'noopener');
+  } else if (href !== '') {
+    // `[text](Note.md#Heading)` and `[text](#heading)` open notes like wikilinks instead of navigating the browser.
+    const { target, heading } = markdownLinkParts(href);
+    const unresolved = target !== '' && (env as RenderEnv).ctx.resolveLink(target) === undefined;
+    token.attrJoin('class', unresolved ? 'internal-link is-unresolved' : 'internal-link');
+    token.attrSet('data-href', target);
+    if (heading !== undefined) token.attrSet('data-heading', heading);
+    token.attrSet('href', '#');
   }
   return self.renderToken(tokens, idx, options);
 };
@@ -312,5 +371,6 @@ const PURIFY_OPTIONS = { ADD_ATTR: ['data-href', 'data-heading', 'data-tag', 'da
 
 /** Render a note to sanitized HTML for the reading view. */
 export function renderMarkdown(content: string, ctx: RenderContext): string {
+  md.set({ breaks: !ctx.strictLineBreaks });
   return DOMPurify.sanitize(renderDocument(content, ctx, 0, 0), PURIFY_OPTIONS);
 }
