@@ -65,7 +65,7 @@ async function openItem(item: SwitcherItem, newTab: boolean): Promise<void> {
   } else if (item.kind === 'unresolved') {
     await openLink(item.target, ws.activeFile, { newTab });
   } else if (item.kind === 'create') {
-    // `path` was validated and normalised by switcherRows; only names that pass validateName get this far.
+    // `path` was validated and normalised by switcherRows; only names that pass validateNotePath get this far.
     const file = await app.vault.createUnique(item.path);
     useWorkspace.getState().openFile(file.path, { newTab });
   }

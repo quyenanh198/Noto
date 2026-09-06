@@ -85,11 +85,14 @@ export function validateName(name: string): string | null {
   return null;
 }
 
-/** Validate a note path: non-empty once normalized (`/`, `.`, `..` are not) and every segment a valid name. Returns an error message or null. */
+/**
+ * Validate a note path as the user typed it (without extension). Every `/`-separated segment must pass `validateName`,
+ * so `.`, `..` and empty segments (`a//b`, a leading or trailing `/`) are errors rather than being normalised away.
+ * This is the single rule for what may become a note: the quick switcher and `openLink` both use it, so the same text
+ * is either accepted or refused everywhere. A path that passes is already normalised. Returns an error message or null.
+ */
 export function validateNotePath(path: string): string | null {
-  const p = normalizePath(path);
-  if (!p) return 'Name cannot be empty.';
-  for (const segment of p.split('/')) {
+  for (const segment of path.split('/')) {
     const error = validateName(segment);
     if (error) return error;
   }

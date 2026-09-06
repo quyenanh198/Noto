@@ -16,6 +16,13 @@ describe('openLink', () => {
     expect(useWorkspace.getState().activeFile).toBe('Welcome.md');
   });
 
+  it('refuses targets with ".", ".." or empty segments rather than creating the normalised path', async () => {
+    // Same rule as the quick switcher, which shows "Cannot create" for these; a click must not create New.md either.
+    for (const target of ['Projects/../New', '../New', './New', 'a//New', '/New', 'New/']) await openLink(target, 'Welcome.md');
+    expect(app.vault.getFiles().map((f) => f.path)).toEqual(['Welcome.md']);
+    expect(useWorkspace.getState().activeFile).toBe('Welcome.md');
+  });
+
   it('creates and opens a missing note next to the source note', async () => {
     await openLink('Ideas inbox', 'Projects/Roadmap.md');
     expect(app.vault.exists('Projects/Ideas inbox.md')).toBe(true);

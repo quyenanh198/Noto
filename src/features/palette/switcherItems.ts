@@ -1,5 +1,5 @@
 import { fuzzyFilter } from '../../core/search/fuzzy';
-import { basename, dirname, isMarkdown, normalizePath, noteTitle, validateName } from '../../core/vault/path';
+import { basename, dirname, isMarkdown, normalizePath, noteTitle, validateNotePath } from '../../core/vault/path';
 
 export type SwitcherItem =
   | { kind: 'note'; path: string; title: string }
@@ -67,8 +67,8 @@ export function switcherRows(query: string, src: SwitcherSource): SwitcherRow[] 
     field: r.field,
   }));
   if (!isTaken(normalized, candidates)) {
-    // Folder segments are fine ("Projects/Weekly"), but each must be a name the rename and create UIs would accept too.
-    const invalid = name.split('/').map((segment) => validateName(segment)).find((error) => error !== null);
+    // The same note-path rule openLink applies before creating a note, so a name is creatable here iff a wikilink to it is.
+    const invalid = validateNotePath(name);
     const item: SwitcherItem = invalid ? { kind: 'invalid', name: q, reason: invalid } : { kind: 'create', name: normalized, path: `${normalized}.md` };
     rows.push({ item, indices: [], field: 0 });
   }
