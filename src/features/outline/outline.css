@@ -2,21 +2,6 @@
   padding: 0 4px 8px;
 }
 
-.outline-count {
-  display: inline-block;
-  min-width: 18px;
-  padding: 0 6px;
-  border-radius: 9px;
-  background: var(--background-modifier-border);
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 16px;
-  text-align: center;
-  text-transform: none;
-  letter-spacing: 0;
-}
-
 .outline-item {
   height: 24px;
   padding-top: 0;
@@ -30,32 +15,6 @@
 .outline-item[data-level='1'] {
   color: var(--text-normal);
   font-weight: 500;
-}
-
-.outline-chevron {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  border: none;
-  border-radius: 3px;
-  background: transparent;
-  color: var(--text-faint);
-  cursor: pointer;
-}
-.outline-chevron:hover {
-  background: var(--background-modifier-hover);
-  color: var(--text-normal);
-}
-.outline-chevron svg {
-  width: 14px;
-  height: 14px;
-}
-.outline-chevron-spacer {
-  cursor: inherit;
 }
 
 .outline-text {

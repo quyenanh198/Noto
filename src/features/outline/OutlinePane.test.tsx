@@ -5,7 +5,7 @@ import { OutlinePane } from './OutlinePane';
 
 const item = (root: Element, i: number) => root.querySelectorAll('[data-testid="outline-item"]')[i];
 const lines = (root: Element) => [...root.querySelectorAll('[data-testid="outline-item"]')].map((el) => el.getAttribute('data-line'));
-const chevron = (root: Element, i: number) => item(root, i).querySelector('button.outline-chevron')!;
+const chevron = (root: Element, i: number) => item(root, i).querySelector('button.pane-chevron')!;
 
 describe('OutlinePane', () => {
   beforeEach(async () => {

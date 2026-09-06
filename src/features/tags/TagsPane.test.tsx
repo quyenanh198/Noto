@@ -19,17 +19,17 @@ describe('TagsPane', () => {
     const shown = rows(container);
     expect(shown.map(([tag]) => tag?.toLowerCase())).toEqual(['project', 'project/alpha', 'project/noto']);
     expect(shown.map(([, count]) => count)).toEqual(['3', '2', '1']);
-    expect(container.querySelector('.tags-count')?.textContent).toBe(String(shown.length));
+    expect(container.querySelector('.pane-count')?.textContent).toBe(String(shown.length));
     unmount();
   });
 
   it('lets Enter on a chevron reach the button without starting a search', () => {
     const { container, unmount } = mount(<TagsPane />);
     const before = { query: useWorkspace.getState().searchQuery, tab: useWorkspace.getState().leftTab };
-    keydown(container.querySelector('button.tags-chevron')!, 'Enter');
+    keydown(container.querySelector('button.pane-chevron')!, 'Enter');
     expect(useWorkspace.getState().searchQuery).toBe(before.query);
     expect(useWorkspace.getState().leftTab).toBe(before.tab);
-    click(container.querySelector('button.tags-chevron')!);
+    click(container.querySelector('button.pane-chevron')!);
     expect(rows(container)).toHaveLength(1);
     unmount();
   });

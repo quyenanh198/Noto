@@ -211,6 +211,49 @@ textarea {
   color: var(--text-muted);
 }
 
+/* Count badge shown in pane headers and group titles */
+.pane-count {
+  display: inline-block;
+  min-width: 18px;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: var(--background-modifier-border);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 16px;
+  text-align: center;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* Collapse/expand chevron button used by pane tree rows */
+.pane-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+.pane-chevron:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+.pane-chevron svg {
+  width: 14px;
+  height: 14px;
+}
+.pane-chevron.is-spacer {
+  cursor: inherit;
+}
+
 .tree-item {
   display: flex;
   align-items: center;

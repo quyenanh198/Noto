@@ -36,7 +36,7 @@ export function TagsPane() {
       <div className="pane-header">
         <span className="tags-header-label">
           Tags
-          <span className="tags-count">{tagCount}</span>
+          <span className="pane-count">{tagCount}</span>
         </span>
         <button className={`clickable-icon tags-sort ${sort === 'count' ? 'is-active' : ''}`} title={sortLabel} aria-label={sortLabel} onClick={() => setSort(nextSort)}>
           <SortIcon />
@@ -86,7 +86,7 @@ function TagItem({ node, depth, collapsed, onToggle }: TagItemProps) {
       >
         {hasChildren ? (
           <button
-            className="tags-chevron"
+            className="pane-chevron"
             aria-label={isCollapsed ? 'Expand' : 'Collapse'}
             onClick={(e) => {
               e.stopPropagation();
@@ -96,7 +96,7 @@ function TagItem({ node, depth, collapsed, onToggle }: TagItemProps) {
             {isCollapsed ? <Icons.chevronRight /> : <Icons.chevronDown />}
           </button>
         ) : (
-          <span className="tags-chevron tags-chevron-spacer" />
+          <span className="pane-chevron is-spacer" />
         )}
         <span className="tag-item-name">{hasChildren ? node.name : '#' + node.name}</span>
         <span className="tag-item-count">{node.count}</span>

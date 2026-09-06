@@ -111,26 +111,9 @@
 .search-result-header.is-selected {
   background: var(--background-modifier-active);
 }
-.search-result-chevron {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  border: none;
-  border-radius: 3px;
+/* The row itself highlights on hover, so the chevron only changes colour here */
+.search-result-header .pane-chevron:hover {
   background: transparent;
-  color: var(--text-faint);
-  cursor: pointer;
-}
-.search-result-chevron:hover {
-  color: var(--text-normal);
-}
-.search-result-chevron svg {
-  width: 14px;
-  height: 14px;
 }
 .search-result-title {
   overflow: hidden;
