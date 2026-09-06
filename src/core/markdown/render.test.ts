@@ -1,10 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { extractSection, renderMarkdown, renderProperties, slugify, toggleTaskLine, uniqueSlug, type RenderContext } from './render';
+import { extractSection, MAX_EMBEDS, renderMarkdown, renderProperties, slugify, toggleTaskLine, uniqueSlug, type RenderContext } from './render';
 
 const notes: Record<string, string> = {
   'Welcome.md': '# Welcome\n\nHello [[Other]]',
   'Other.md': 'Other body ![[Welcome]]',
   'Sections.md': '# Top\n\nintro\n\n## Part A\n\nalpha\n\n### Sub\n\nsub\n\n## Part B\n\nbeta',
+  'Chain1.md': 'one ![[Chain2]]',
+  'Chain2.md': 'two ![[Chain3]]',
+  'Chain3.md': 'three',
+  'Brackets.md': '# Intro\n\n## Setup [draft]\n\nbody\n\n## A | B\n\nbar\n\n## Other',
+  'Self.md': '# A\n\n![[#A]]\n\n# B\n\n![[#A]]',
+  'Bomb.md': Array(40).fill('![[Bomb]]').join('\n'),
+  'Ping.md': Array(20).fill('![[Pong]]').join('\n'),
+  'Pong.md': Array(20).fill('![[Ping]]').join('\n'),
+  'Fan.md': Array(20).fill('![[Wide]]').join('\n'),
+  'Wide.md': Array(20).fill('![[Sections]]').join('\n'),
 };
 
 const ctx: RenderContext = {
@@ -164,18 +174,67 @@ describe('front matter', () => {
 
 describe('embeds', () => {
   it('renders embedded notes recursively up to the depth limit', () => {
-    // Welcome -> embeds Other -> embeds Welcome -> would embed Other (stops)
+    // Welcome -> embeds Chain1 -> embeds Chain2 -> would embed Chain3 (stops)
+    const dom = render('Start ![[Chain1]]', { path: 'Welcome.md' });
+    const outer = dom.querySelector('.markdown-embed');
+    expect(outer?.getAttribute('data-href')).toBe('Chain1');
+    expect(outer?.querySelector('.markdown-embed-title')?.textContent).toBe('Chain1');
+    expect(outer?.querySelector('.markdown-embed-content')?.textContent).toContain('one');
+    const inner = outer?.querySelector('.markdown-embed-content .markdown-embed');
+    expect(inner?.getAttribute('data-href')).toBe('Chain2');
+    expect(inner?.textContent).toContain('two');
+    // depth 2: rendered as a link instead of a third nested embed
+    expect(inner?.querySelector('.markdown-embed')).toBeNull();
+    expect(inner?.querySelector('a.internal-link[data-href="Chain3"]')).not.toBeNull();
+  });
+
+  it('renders an embed of a note that is already being embedded as a link', () => {
+    // Welcome -> Other -> Welcome is a cycle: the inner Welcome is a link instead of another copy of the chain.
     const dom = render('Start ![[Other]]', { path: 'Welcome.md' });
     const outer = dom.querySelector('.markdown-embed');
     expect(outer?.getAttribute('data-href')).toBe('Other');
-    expect(outer?.querySelector('.markdown-embed-title')?.textContent).toBe('Other');
-    expect(outer?.querySelector('.markdown-embed-content')?.textContent).toContain('Other body');
-    const inner = outer?.querySelector('.markdown-embed-content .markdown-embed');
-    expect(inner?.getAttribute('data-href')).toBe('Welcome');
-    expect(inner?.querySelector('h1')?.textContent).toBe('Welcome');
-    // depth 2: rendered as a link instead of a third nested embed
-    expect(inner?.querySelector('.markdown-embed')).toBeNull();
-    expect(inner?.querySelector('a.internal-link[data-href="Other"]')).not.toBeNull();
+    expect(outer?.querySelector('.markdown-embed')).toBeNull();
+    expect(outer?.querySelector('a.internal-link[data-href="Welcome"]')).not.toBeNull();
+    // A note may embed one of its own sections, but not again from inside that section.
+    const self = render(notes['Self.md'], { path: 'Self.md' });
+    const embeds = [...self.querySelectorAll('.markdown-embed')];
+    expect(embeds).toHaveLength(2);
+    for (const e of embeds) {
+      expect(e.querySelector('.markdown-embed')).toBeNull();
+      expect(e.querySelector('a.internal-link[data-href=""][data-heading="A"]')).not.toBeNull();
+    }
+  });
+
+  it('keeps a note that embeds itself many times small', () => {
+    const dom = render(notes['Bomb.md'], { path: 'Bomb.md' });
+    expect(dom.querySelectorAll('.markdown-embed')).toHaveLength(0);
+    expect(dom.querySelectorAll('a.internal-link[data-href="Bomb"]')).toHaveLength(40);
+    expect(dom.innerHTML.length).toBeLessThan(10_000);
+    // Two notes embedding each other 20 times each: one level of embeds, then links.
+    const ping = render(notes['Ping.md'], { path: 'Ping.md' });
+    expect(ping.querySelectorAll('.markdown-embed')).toHaveLength(20);
+    expect(ping.querySelectorAll('.markdown-embed .markdown-embed')).toHaveLength(0);
+    expect(ping.querySelectorAll('a.internal-link[data-href="Ping"]')).toHaveLength(400);
+  });
+
+  it('stops expanding embeds once the budget of one rendered note is spent', () => {
+    // 20 embeds of a note holding 20 embeds each would be 420 expansions.
+    const dom = render(notes['Fan.md'], { path: 'Fan.md' });
+    expect(dom.querySelectorAll('.markdown-embed')).toHaveLength(MAX_EMBEDS);
+    expect(dom.querySelector('a.internal-link[data-href="Wide"]:not(.is-unresolved)')).not.toBeNull();
+    expect(dom.querySelector('a.internal-link[data-href="Sections"]:not(.is-unresolved)')).not.toBeNull();
+  });
+
+  it('matches section headings by their link form', () => {
+    // Autocomplete inserts `Setup draft` for `## Setup [draft]`: brackets and pipes cannot be written inside a link.
+    const dom = render('![[Brackets#Setup draft]]\n\n![[Brackets#A B]]\n\n![[Brackets#a  b]]');
+    const embeds = [...dom.querySelectorAll('.markdown-embed')];
+    expect(embeds).toHaveLength(3);
+    expect(embeds[0].textContent).toContain('body');
+    expect(embeds[0].textContent).not.toContain('bar');
+    expect(embeds[1].textContent).toContain('bar');
+    expect(embeds[2].textContent).toContain('bar');
+    expect(extractSection(notes['Brackets.md'], 'A B')?.line).toBe(6);
   });
 
   it('embeds a single section for heading embeds', () => {

@@ -255,7 +255,24 @@ export function parseLinkInner(inner: string): Omit<WikiLink, 'embed' | 'raw' | 
   return { target, alias, heading, block, display };
 }
 
-const TAG = /(^|[^\w#&/\\`])#([\p{L}\p{N}_\-/]+)/gmu;
+// The tag grammar, shared with the reading view's inline rule (render.ts) and the editor's tag autocomplete so that
+// the index, the rendered note and the suggestions always agree on what a tag is.
+
+/** Body of a character class: the characters a tag name may consist of (letters, digits, `_`, `-`, `/`). */
+export const TAG_NAME_CHARS = '\\p{L}\\p{N}_\\-/';
+/** Body of a character class: a `#` right after one of these is not a tag (`a#b`, `##`, `&#39;`, `\#x`, `` `#x` ``). */
+export const TAG_BOUNDARY_CHARS = '\\w#&/\\\\`';
+
+const TAG = new RegExp(`(^|[^${TAG_BOUNDARY_CHARS}])#([${TAG_NAME_CHARS}]+)`, 'gmu');
+
+/**
+ * The tag name for the text written after `#` (a run of TAG_NAME_CHARS), or null when it is not a tag: trailing `/` and
+ * `-` are not part of the name (`#tag/`, `#tag-`), and a name of digits only (`#123`, `#123-`) is not a tag.
+ */
+export function normalizeTagName(raw: string): string | null {
+  const name = raw.replace(/[/-]+$/, '');
+  return name !== '' && !/^\d+$/.test(name) ? name : null;
+}
 
 /** Inline `#tags`. A tag must contain at least one non-digit character. Text inside `[[wikilinks]]` is never a tag. */
 export function parseInlineTags(content: string, regions = codeRegions(content)): TagRef[] {
@@ -267,11 +284,8 @@ export function parseInlineTags(content: string, regions = codeRegions(content))
   while ((m = TAG.exec(content))) {
     const start = m.index + m[1].length;
     if (inRegions(start, skip)) continue;
-    let name = m[2].replace(/\/+$/, '');
-    if (!name || /^\d+$/.test(name)) continue;
-    // Ignore a trailing dash-only segment
-    name = name.replace(/-+$/, '');
-    if (!name) continue;
+    const name = normalizeTagName(m[2]);
+    if (name === null) continue;
     out.push({ name, position: range(content, start, start + 1 + m[2].length, lineStarts) });
   }
   return out;
