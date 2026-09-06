@@ -105,6 +105,27 @@ export function expandAncestors(expanded: ReadonlySet<string>, path: string): Re
   return new Set([...expanded, ...missing]);
 }
 
+/**
+ * Returns `expanded` after the folder `from` was renamed or moved to `to`: it and every expanded folder inside it
+ * are re-keyed under the new path and the old paths dropped. Returns the same set when nothing changes.
+ */
+export function rekeyExpanded(expanded: ReadonlySet<string>, from: string, to: string): ReadonlySet<string> {
+  const affected = [...expanded].filter((p) => isWithin(p, from));
+  if (affected.length === 0) return expanded;
+  const next = new Set(expanded);
+  for (const p of affected) {
+    next.delete(p);
+    next.add(to + p.slice(from.length));
+  }
+  return next;
+}
+
+/** Returns `expanded` without `folder` and every folder inside it, or the same set when nothing changes. */
+export function removeExpanded(expanded: ReadonlySet<string>, folder: string): ReadonlySet<string> {
+  const kept = [...expanded].filter((p) => !isWithin(p, folder));
+  return kept.length === expanded.size ? expanded : new Set(kept);
+}
+
 /** `New folder`, then `New folder 1`, `New folder 2`… inside `parent` (`''` for root), skipping paths that exist. */
 export function uniqueFolderPath(parent: string, exists: (path: string) => boolean, base = 'New folder'): string {
   let candidate = joinPath(parent, base);

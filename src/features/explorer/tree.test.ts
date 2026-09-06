@@ -8,6 +8,8 @@ import {
   flattenTree,
   moveDestination,
   navigate,
+  rekeyExpanded,
+  removeExpanded,
   renamePrefill,
   renameTarget,
   uniqueFolderPath,
@@ -80,6 +82,31 @@ describe('expandAncestors', () => {
     expect([...next].sort()).toEqual(['a', 'a/b', 'other']);
     expect(expandAncestors(next, 'a/b/c.md')).toBe(next);
     expect(expandAncestors(start, 'root.md')).toBe(start);
+  });
+});
+
+describe('rekeyExpanded', () => {
+  it('moves the folder and its expanded descendants to the new path and drops the old ones', () => {
+    const next = rekeyExpanded(new Set(['Projects', 'Projects/Sub', 'Projectsy', 'Daily']), 'Projects', 'Work');
+    expect([...next].sort()).toEqual(['Daily', 'Projectsy', 'Work', 'Work/Sub']);
+  });
+
+  it('follows a move into another folder and keeps a collapsed parent collapsed', () => {
+    const next = rekeyExpanded(new Set(['Work/Sub']), 'Work', 'Archive/Work');
+    expect([...next]).toEqual(['Archive/Work/Sub']);
+  });
+
+  it('returns the same set when nothing under the old path was expanded', () => {
+    const start: ReadonlySet<string> = new Set(['Daily']);
+    expect(rekeyExpanded(start, 'Projects', 'Work')).toBe(start);
+  });
+});
+
+describe('removeExpanded', () => {
+  it('drops the folder and everything inside it, returning the same set when nothing changes', () => {
+    const start: ReadonlySet<string> = new Set(['Projects', 'Projects/Sub', 'Projectsy']);
+    expect([...removeExpanded(start, 'Projects')]).toEqual(['Projectsy']);
+    expect(removeExpanded(start, 'Daily')).toBe(start);
   });
 });
 
