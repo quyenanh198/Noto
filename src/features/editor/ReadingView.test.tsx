@@ -86,6 +86,29 @@ describe('ReadingView clicks', () => {
     await act(async () => useWorkspace.setState({ strictLineBreaks: false }));
     expect(container.querySelectorAll('br')).toHaveLength(1);
   });
+
+  it('hands its top line to the view that replaces it when the note is renamed while it is showing', async () => {
+    // Like the shell, key the view by the active path: a rename swaps the view for one under the new path.
+    function Shell() {
+      const active = useWorkspace((s) => s.activeFile);
+      return active ? <ReadingView key={active} path={active} /> : null;
+    }
+    await act(async () => root.render(<Shell />));
+    scrollIntoView.mockClear();
+    await act(async () => {
+      await app.vault.rename('Welcome.md', 'Hello.md');
+    });
+    expect(useWorkspace.getState().openTabs).toEqual(['Hello.md']);
+    expect(container.querySelector('h1.inline-title')?.textContent).toBe('Hello');
+    // The new view resumed at the line the old one recorded (in jsdom every block sits at the top edge).
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect((scrollIntoView.mock.contexts[0] as HTMLElement).closest('.markdown-preview-content')).toBe(container.querySelector('.markdown-preview-content'));
+
+    await act(async () => useWorkspace.setState({ openTabs: [], activeFile: null }));
+    await act(async () => {
+      await app.vault.rename('Hello.md', 'Welcome.md');
+    });
+  });
 });
 
 describe('findNavigationTarget', () => {

@@ -5,6 +5,7 @@ import { Vault } from './core/vault/Vault';
 import { SAMPLE_VAULT } from './core/vault/sampleVault';
 import type { StorageAdapter } from './core/types';
 import { replayDraft } from './features/editor/draftJournal';
+import { viewMemoryRenamed } from './features/editor/viewMemory';
 import { useWorkspace } from './state/store';
 
 /** Singleton services shared by the whole UI. */
@@ -20,6 +21,8 @@ function createApp(adapter: StorageAdapter): NotoApp {
   const commands = new CommandRegistry();
   vault.on((e) => {
     const ws = useWorkspace.getState();
+    // What the views of the moved notes kept (undo history, scroll position) follows them before the tabs do.
+    if (e.type === 'rename' || e.type === 'folder-rename') viewMemoryRenamed(e.oldPath, e.newPath);
     if (e.type === 'rename') ws.fileRenamed(e.oldPath, e.newPath);
     if (e.type === 'folder-rename') ws.folderRenamed(e.oldPath, e.newPath);
     if (e.type === 'delete') ws.fileDeleted(e.path);

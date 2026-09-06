@@ -123,6 +123,20 @@ describe('workspace store', () => {
     expect(s().searchFocusRequest).toBe(before + 2);
   });
 
+  it('searchTag searches for a tag in the search pane, with or without the leading #', () => {
+    const s = () => useWorkspace.getState();
+    useWorkspace.setState({ leftSidebarOpen: false, leftTab: 'tags', searchQuery: '' });
+    const before = s().searchFocusRequest;
+    s().searchTag('project/noto');
+    expect(s().searchQuery).toBe('tag:#project/noto');
+    expect(s().leftTab).toBe('search');
+    expect(s().leftSidebarOpen).toBe(true);
+    expect(s().searchFocusRequest).toBe(before + 1);
+    s().searchTag('#project/noto');
+    expect(s().searchQuery).toBe('tag:#project/noto');
+    expect(s().searchFocusRequest).toBe(before + 2);
+  });
+
   it('stores navigation targets until consumed', () => {
     const s = () => useWorkspace.getState();
     s().openFile('a.md', { heading: 'H' });

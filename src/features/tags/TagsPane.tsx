@@ -60,11 +60,7 @@ interface TagItemProps {
 function TagItem({ node, depth, collapsed, onToggle }: TagItemProps) {
   const hasChildren = node.children.length > 0;
   const isCollapsed = collapsed.has(node.tag);
-  const search = () => {
-    const ws = useWorkspace.getState();
-    ws.setSearchQuery('tag:#' + node.tag);
-    ws.setLeftTab('search');
-  };
+  const search = () => useWorkspace.getState().searchTag(node.tag);
   return (
     <>
       <div

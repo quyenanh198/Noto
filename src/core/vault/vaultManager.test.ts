@@ -26,10 +26,15 @@ import {
  */
 class FakeHandle implements DirectoryHandle {
   readonly kind = 'directory' as const;
+  /** Stands in for the disk entry, so a stored clone still compares equal to the original (as real handles do). */
+  readonly entry = Math.random();
   constructor(
     public readonly name: string,
     public permission: PermissionState = 'granted',
   ) {}
+  async isSameEntry(other: DirectoryHandle | FileHandle): Promise<boolean> {
+    return (other as { entry?: number }).entry === this.entry;
+  }
   async *values(): AsyncGenerator<DirectoryHandle | FileHandle> {}
   getDirectoryHandle(): Promise<DirectoryHandle> {
     return Promise.reject(new Error('not implemented'));
@@ -207,5 +212,39 @@ describe('vaultManager', () => {
     expect(useWorkspace.getState().vaultLabel).toBe(BROWSER_VAULT_LABEL);
     expect(await loadVaultChoice()).toEqual({ kind: 'indexeddb' });
     expect(await getPendingFolder()).toBeNull();
+  });
+
+  it('gives a picked folder a lasting identity that another folder of the same name does not share', async () => {
+    const host = makeHost();
+    await host.vault.load();
+    const notes = new FakeHandle('Notes');
+    picker(async () => notes);
+    expect(await openFolderVault(host)).toBe(true);
+    const first = host.vault.adapter as FileSystemAccessAdapter;
+    expect(first.id).toMatch(/\S/);
+    const saved = await loadVaultChoice();
+    expect(saved?.kind === 'fsa' ? saved.id : undefined).toBe(first.id);
+
+    // Picking the same folder again (after a browser restart, say) keeps the identity...
+    expect(await openFolderVault(host)).toBe(true);
+    expect((host.vault.adapter as FileSystemAccessAdapter).id).toBe(first.id);
+
+    // ...while a different folder, however it is called, is another vault.
+    picker(async () => new FakeHandle('Notes'));
+    expect(await openFolderVault(host)).toBe(true);
+    expect((host.vault.adapter as FileSystemAccessAdapter).id).not.toBe(first.id);
+    await useBrowserVault(host);
+  });
+
+  it('assigns an identity to a folder remembered before folders had one, and keeps it', async () => {
+    const handle = new FakeHandle('Old');
+    await saveVaultChoice({ kind: 'fsa', handle, name: 'Old' });
+    const loaded = await loadVaultChoice();
+    const id = loaded?.kind === 'fsa' ? loaded.id : undefined;
+    expect(id).toMatch(/\S/);
+    const again = await loadVaultChoice();
+    expect(again?.kind === 'fsa' ? again.id : undefined).toBe(id);
+    expect(await resolveSavedVault({ kind: 'fsa', handle, name: 'Old', id })).toHaveProperty('id', id);
+    await saveVaultChoice({ kind: 'indexeddb' });
   });
 });
