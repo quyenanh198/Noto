@@ -30,46 +30,62 @@ class FakeFile implements FileHandle {
       },
     };
   }
+  async isSameEntry(other: FileHandle | DirectoryHandle): Promise<boolean> {
+    return other === this;
+  }
 }
+
+/** How a fake file system matches names: exactly (Linux), ignoring case (macOS, Windows), or by Unicode form (APFS). */
+type Canonical = (name: string) => string;
+const exact: Canonical = (name) => name;
+const ignoreCase: Canonical = (name) => name.toLowerCase();
+const nfc: Canonical = (name) => name.normalize('NFC');
 
 class FakeDir implements DirectoryHandle {
   readonly kind = 'directory' as const;
+  /** Entries keyed by their canonical name; each entry keeps the name it was created with. */
   entries = new Map<string, FakeDir | FakeFile>();
   permission: PermissionState = 'granted';
-  constructor(public readonly name: string) {}
+  constructor(
+    public readonly name: string,
+    readonly canonical: Canonical = exact,
+  ) {}
 
   async *values(): AsyncGenerator<FakeDir | FakeFile> {
     for (const entry of this.entries.values()) yield entry;
   }
   async getDirectoryHandle(name: string, options?: FileSystemGetDirectoryOptions): Promise<FakeDir> {
-    const existing = this.entries.get(name);
+    const existing = this.entries.get(this.canonical(name));
     if (existing) {
       if (existing.kind !== 'directory') throw new DOMException(`${name} is a file`, 'TypeMismatchError');
       return existing;
     }
     if (!options?.create) throw new DOMException(`${name} not found`, 'NotFoundError');
-    const dir = new FakeDir(name);
-    this.entries.set(name, dir);
+    const dir = new FakeDir(name, this.canonical);
+    this.entries.set(this.canonical(name), dir);
     return dir;
   }
   async getFileHandle(name: string, options?: FileSystemGetFileOptions): Promise<FakeFile> {
-    const existing = this.entries.get(name);
+    const existing = this.entries.get(this.canonical(name));
     if (existing) {
       if (existing.kind !== 'file') throw new DOMException(`${name} is a directory`, 'TypeMismatchError');
       return existing;
     }
     if (!options?.create) throw new DOMException(`${name} not found`, 'NotFoundError');
     const file = new FakeFile(name, '');
-    this.entries.set(name, file);
+    this.entries.set(this.canonical(name), file);
     return file;
   }
   async removeEntry(name: string, options?: FileSystemRemoveOptions): Promise<void> {
-    const existing = this.entries.get(name);
+    const existing = this.entries.get(this.canonical(name));
     if (!existing) throw new DOMException(`${name} not found`, 'NotFoundError');
     if (existing.kind === 'directory' && existing.entries.size > 0 && !options?.recursive) {
       throw new DOMException(`${name} is not empty`, 'InvalidModificationError');
     }
-    this.entries.delete(name);
+    this.entries.delete(this.canonical(name));
+  }
+  async isSameEntry(other: FileHandle | DirectoryHandle): Promise<boolean> {
+    return other === this;
   }
   async queryPermission(): Promise<PermissionState> {
     return this.permission;
@@ -81,18 +97,19 @@ class FakeDir implements DirectoryHandle {
 
 type Tree = { [name: string]: string | Tree };
 
-function build(tree: Tree, name = 'Vault'): FakeDir {
-  const dir = new FakeDir(name);
+function build(tree: Tree, name = 'Vault', canonical: Canonical = exact): FakeDir {
+  const dir = new FakeDir(name, canonical);
   for (const [entry, value] of Object.entries(tree)) {
-    dir.entries.set(entry, typeof value === 'string' ? new FakeFile(entry, value) : build(value, entry));
+    dir.entries.set(canonical(entry), typeof value === 'string' ? new FakeFile(entry, value) : build(value, entry, canonical));
   }
   return dir;
 }
 
-/** Flatten a fake directory into `path -> content` for assertions. */
+/** Flatten a fake directory into `path -> content` (keyed by the names as stored on disk) for assertions. */
 function dump(dir: FakeDir, prefix = ''): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const [name, entry] of dir.entries) {
+  for (const entry of dir.entries.values()) {
+    const name = entry.name;
     const path = prefix ? `${prefix}/${name}` : name;
     if (entry.kind === 'file') out[path] = entry.content;
     else {
@@ -228,5 +245,82 @@ describe('FileSystemAccessAdapter', () => {
     expect(dump(root)).toEqual({ 'Welcome.md': '# Hi', 'Thoughts/': '', 'Thoughts/Plan.md': 'plan v2' });
     await vault.deleteFolder('Thoughts');
     expect(dump(root)).toEqual({ 'Welcome.md': '# Hi' });
+  });
+});
+
+describe('FileSystemAccessAdapter on case-insensitive file systems', () => {
+  it('renames a note to a different casing without losing it', async () => {
+    const root = build({ 'Note.md': 'precious', 'Other.md': 'other' }, 'Vault', ignoreCase);
+    const vault = new Vault(new FileSystemAccessAdapter(root));
+    await vault.load();
+    await vault.rename('Note.md', 'note.md');
+    expect(dump(root)).toEqual({ 'note.md': 'precious', 'Other.md': 'other' });
+    await vault.load();
+    expect(vault.getFiles().map((f) => [f.path, f.content])).toEqual([
+      ['note.md', 'precious'],
+      ['Other.md', 'other'],
+    ]);
+  });
+
+  it('renames a folder to a different casing without losing its contents', async () => {
+    const root = build({ Notes: { 'a.md': 'a', 'img.png': 'png', Sub: { 'b.md': 'b' } }, 'Keep.md': 'k' }, 'Vault', ignoreCase);
+    const vault = new Vault(new FileSystemAccessAdapter(root));
+    await vault.load();
+    await vault.renameFolder('Notes', 'notes');
+    expect(dump(root)).toEqual({ 'Keep.md': 'k', 'notes/': '', 'notes/a.md': 'a', 'notes/img.png': 'png', 'notes/Sub/': '', 'notes/Sub/b.md': 'b' });
+    await vault.load();
+    expect(vault.getFiles().map((f) => f.path).sort()).toEqual(['Keep.md', 'notes/Sub/b.md', 'notes/a.md']);
+    expect(vault.getFolders()).toEqual(['notes', 'notes/Sub']);
+    // The renamed folder is a fresh directory, not a stale cached handle.
+    await vault.create('notes/c.md', 'c');
+    expect(dump(root)['notes/c.md']).toBe('c');
+  });
+
+  it('refuses to rename onto a case variant of another entry instead of overwriting it', async () => {
+    const tree: Tree = { 'Foo.md': 'foo body', 'Bar.md': 'bar body', Docs: { 'd.md': 'd' }, Other: { 'o.md': 'o' } };
+    const root = build(tree, 'Vault', ignoreCase);
+    const vault = new Vault(new FileSystemAccessAdapter(root));
+    await vault.load();
+    await expect(vault.rename('Foo.md', 'bar.md')).rejects.toThrow(/already exists/);
+    await expect(vault.renameFolder('Other', 'docs')).rejects.toThrow(/already exists/);
+    expect(dump(root)).toEqual(dump(build(tree)));
+    expect(vault.getFiles().map((f) => f.path)).toEqual(['Bar.md', 'Docs/d.md', 'Foo.md', 'Other/o.md']);
+  });
+
+  it('goes through a temporary name whenever the browser reports both names as one entry', async () => {
+    const composed = 'Caf\u00e9';
+    const decomposed = 'Cafe\u0301';
+    const root = build({ [`${composed}.md`]: 'coffee', [composed]: { 'x.md': 'x', 'pic.png': 'p' } }, 'Vault', nfc);
+    const adapter = new FileSystemAccessAdapter(root);
+    await adapter.load();
+    await adapter.renameFile(`${composed}.md`, `${decomposed}.md`);
+    await adapter.renameFolder(composed, decomposed);
+    expect(dump(root)).toEqual({ [`${decomposed}.md`]: 'coffee', [`${decomposed}/`]: '', [`${decomposed}/x.md`]: 'x', [`${decomposed}/pic.png`]: 'p' });
+  });
+});
+
+describe('FileSystemAccessAdapter with names that start or end with spaces', () => {
+  it('keeps the on-disk names so every operation reaches the right entry', async () => {
+    const root = build({ ' Archive': { 'x.md': 'x body' }, ' draft.md': 'draft body', 'Welcome.md': 'w' });
+    const vault = new Vault(new FileSystemAccessAdapter(root));
+    await vault.load();
+    expect(vault.getFiles().map((f) => f.path).sort()).toEqual([' Archive/x.md', ' draft.md', 'Welcome.md']);
+    expect(vault.getFolders()).toEqual([' Archive']);
+
+    await vault.modify(' draft.md', 'edited');
+    expect(dump(root)[' draft.md']).toBe('edited');
+    expect(dump(root)['draft.md']).toBeUndefined();
+
+    await vault.rename(' draft.md', 'draft.md');
+    await vault.renameFolder(' Archive', 'Old');
+    expect(dump(root)).toEqual({ 'Welcome.md': 'w', 'draft.md': 'edited', 'Old/': '', 'Old/x.md': 'x body' });
+
+    await vault.createFolder(' Spaced ');
+    await vault.create(' Spaced / note .md', 'n');
+    expect(dump(root)[' Spaced / note .md']).toBe('n');
+    await vault.deleteFolder(' Spaced ');
+    await vault.deleteFolder('Old');
+    await vault.delete('draft.md');
+    expect(dump(root)).toEqual({ 'Welcome.md': 'w' });
   });
 });

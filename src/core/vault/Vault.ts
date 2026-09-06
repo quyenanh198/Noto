@@ -120,6 +120,19 @@ export class Vault {
     return dupes.length > 1 ? stripExt(path) : title;
   }
 
+  /**
+   * An existing path among `candidates` that equals `path` ignoring case, other than `self`.
+   * The default file systems on macOS and Windows treat such names as the same entry, so a
+   * rename onto one would overwrite (or, copying then deleting, destroy) the other entry.
+   */
+  private caseVariantOf(path: string, candidates: Iterable<string>, self: string): string | undefined {
+    const wanted = path.toLowerCase();
+    for (const candidate of candidates) {
+      if (candidate !== self && candidate.toLowerCase() === wanted) return candidate;
+    }
+    return undefined;
+  }
+
   // ----- mutations -----
 
   async create(path: string, content = ''): Promise<VaultFile> {
@@ -171,6 +184,8 @@ export class Vault {
     if (!file) throw new Error(`File not found: ${from}`);
     if (from === to) return;
     if (this.files.has(to)) throw new Error(`File already exists: ${to}`);
+    const clash = this.caseVariantOf(to, this.files.keys(), from);
+    if (clash !== undefined) throw new Error(`File already exists: ${clash}`);
     this.files.delete(from);
     this.files.set(to, { ...file, path: to, mtime: Date.now() });
     await this.adapter.renameFile(from, to);
@@ -207,6 +222,8 @@ export class Vault {
     if (from === to) return;
     if (isWithin(to, from)) throw new Error('Cannot move a folder into itself.');
     if (this.folderExists(to)) throw new Error(`Folder already exists: ${to}`);
+    const clash = this.caseVariantOf(to, this.getFolders(), from);
+    if (clash !== undefined) throw new Error(`Folder already exists: ${clash}`);
     for (const [path, file] of [...this.files]) {
       if (!isWithin(path, from)) continue;
       const next = to + path.slice(from.length);

@@ -1,10 +1,13 @@
-/** Path helpers for vault-relative paths. Vault paths use `/`, never start with `/`, never contain `.` or `..` segments. */
+/**
+ * Path helpers for vault-relative paths. Vault paths use `/`, never start with `/`, never contain `.` or `..` segments.
+ * Segments are kept verbatim: names on disk may start or end with spaces, and trimming them would make the vault
+ * address a different entry than the one it listed. User-typed names are trimmed by the UI before they get here.
+ */
 
 export function normalizePath(path: string): string {
   const parts = path.replace(/\\/g, '/').split('/');
   const out: string[] = [];
-  for (const raw of parts) {
-    const seg = raw.trim();
+  for (const seg of parts) {
     if (seg === '' || seg === '.') continue;
     if (seg === '..') {
       out.pop();
