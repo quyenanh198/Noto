@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { codeRegions, countWords, parseFrontmatter, parseHeadings, parseInlineTags, parseLinkInner, parseNote, parseWikiLinks } from './links';
+import { codeRegions, countWords, normalizeTagName, parseFrontmatter, parseHeadings, parseInlineTags, parseLinkInner, parseNote, parseWikiLinks } from './links';
 import { renderMarkdown } from './render';
 
 describe('parseWikiLinks', () => {
@@ -77,6 +77,20 @@ describe('parseInlineTags', () => {
     expect(parseInlineTags('see [[#Explore]]')).toEqual([]);
     expect(parseInlineTags('[[#Heading with alias|alias]] [[Other #H]] [[Other|see #todo later]]')).toEqual([]);
     expect(parseInlineTags('[[Note#Heading]] #real').map((t) => t.name)).toEqual(['real']);
+  });
+
+  it('drops trailing separators and rejects names made of digits only', () => {
+    expect(normalizeTagName('tag')).toBe('tag');
+    expect(normalizeTagName('a/b-c')).toBe('a/b-c');
+    expect(normalizeTagName('tag/')).toBe('tag');
+    expect(normalizeTagName('tag-')).toBe('tag');
+    expect(normalizeTagName('a/-')).toBe('a');
+    expect(normalizeTagName('123')).toBeNull();
+    expect(normalizeTagName('123-')).toBeNull();
+    expect(normalizeTagName('123-/')).toBeNull();
+    expect(normalizeTagName('-')).toBeNull();
+    expect(normalizeTagName('1a')).toBe('1a');
+    expect(parseInlineTags('#abc- #123- #a/-').map((t) => t.name)).toEqual(['abc', 'a']);
   });
 });
 
@@ -200,6 +214,7 @@ describe('agreement with the renderer', () => {
     '| col |\n| --- |\n| [[Welcome#Get started\\|start]] |',
     'Contents: [[#Intro]] [[Other|see #todo]]\n\n# Intro\n\n#real',
     '> ```\n> # not a heading\n> ```\n> # Quoted',
+    'trailing #abc- #abc/ #a/- and digits #123 #123- #123-/ #1a #a1-',
   ];
 
   function rendered(text: string) {

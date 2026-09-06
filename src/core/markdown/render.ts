@@ -2,7 +2,8 @@ import DOMPurify from 'dompurify';
 import MarkdownIt from 'markdown-it';
 import type { Delimiter, StateCore, StateInline, Token } from 'markdown-it';
 import { basename, noteTitle } from '../vault/path';
-import { frontmatterTags, parseFrontmatter, parseHeadings, parseLinkInner } from './links';
+import { headingsMatch } from './headingLink';
+import { frontmatterTags, normalizeTagName, parseFrontmatter, parseHeadings, parseLinkInner, TAG_BOUNDARY_CHARS, TAG_NAME_CHARS } from './links';
 
 export interface RenderContext {
   /** Path of the note being rendered. */
@@ -17,6 +18,12 @@ export interface RenderContext {
 
 /** How many levels of `![[embed]]` are rendered before falling back to a link. */
 export const MAX_EMBED_DEPTH = 2;
+/**
+ * How many `![[embeds]]` (nested ones included) one rendered note expands before the rest fall back to links. Together
+ * with the cycle check in renderEmbed this keeps a note of N self-embeds, which would otherwise render N + N^2 copies of
+ * itself, from freezing the page.
+ */
+export const MAX_EMBEDS = 100;
 
 const IMAGE_EXT = /\.(png|jpe?g|gif|svg|webp)$/i;
 
@@ -28,6 +35,10 @@ interface RenderEnv {
   /** Added to markdown-it line numbers so `data-line` refers to the full source. */
   lineOffset: number;
   slugs: Map<string, number>;
+  /** Shared by every document of one renderMarkdown call: how many embeds may still be expanded. */
+  budget: { embeds: number };
+  /** The note and sections (`path`, `path#line`) whose embedding led to this document; embedding one again is a cycle. */
+  stack: string[];
 }
 
 interface CheckboxMeta {
@@ -79,8 +90,8 @@ export function toggleTaskLine(content: string, line: number): string {
 /** The markdown of a heading's section: from the heading to the next heading of the same or a higher level. */
 export function extractSection(content: string, heading: string): { text: string; line: number } | undefined {
   const headings = parseHeadings(content);
-  const want = heading.trim().toLowerCase();
-  const i = headings.findIndex((h) => h.text.toLowerCase() === want);
+  // Compared in link form, like navigation does: `![[Note#A B]]` is how autocomplete writes `## A | B`.
+  const i = headings.findIndex((h) => headingsMatch(h.text, heading));
   if (i === -1) return undefined;
   const start = headings[i];
   const end = headings.slice(i + 1).find((h) => h.level <= start.level);
@@ -111,8 +122,8 @@ function wikilinkRule(state: StateInline, silent: boolean): boolean {
   return true;
 }
 
-const TAG_NAME = /[\p{L}\p{N}_\-/]+/uy;
-const TAG_BOUNDARY = /[\w#&/\\`]/;
+const TAG_NAME = new RegExp(`[${TAG_NAME_CHARS}]+`, 'uy');
+const TAG_BOUNDARY = new RegExp(`[${TAG_BOUNDARY_CHARS}]`);
 
 /** markdown-it raises `linkLevel` while it tokenizes a link label; the typings omit the field. */
 type InlineState = StateInline & { linkLevel: number };
@@ -127,8 +138,8 @@ function tagRule(state: StateInline, silent: boolean): boolean {
   TAG_NAME.lastIndex = pos + 1;
   const m = TAG_NAME.exec(src);
   if (!m) return false;
-  const name = m[0].replace(/\/+$/, '').replace(/-+$/, '');
-  if (!name || /^\d+$/.test(name) || pos + 1 + name.length > state.posMax) return false;
+  const name = normalizeTagName(m[0]);
+  if (name === null || pos + 1 + name.length > state.posMax) return false;
   if (!silent) {
     const token = state.push('tag', 'a', 0);
     token.meta = { name };
@@ -271,7 +282,8 @@ function renderEmbed(link: LinkParts, env: RenderEnv, line: string | null): stri
   const inline = (html: string) => (line === null ? html : `<p data-line="${escapeHtml(line)}">${html}</p>`);
   if (IMAGE_EXT.test(link.target)) return inline(`<span class="embed-missing">${escapeHtml(basename(link.target))}</span>`);
   const resolved = link.target === '' ? env.ctx.path : env.ctx.resolveLink(link.target);
-  const content = resolved !== undefined && env.depth < MAX_EMBED_DEPTH ? env.ctx.getEmbedContent?.(resolved) : undefined;
+  const expand = resolved !== undefined && env.depth < MAX_EMBED_DEPTH && env.budget.embeds > 0;
+  const content = expand ? env.ctx.getEmbedContent?.(resolved) : undefined;
   if (resolved === undefined || content === undefined) return inline(renderInternalLink(link, env));
   let body = { text: content, line: 0 };
   if (link.heading !== undefined) {
@@ -279,8 +291,12 @@ function renderEmbed(link: LinkParts, env: RenderEnv, line: string | null): stri
     if (!section) return inline(renderInternalLink(link, env));
     body = section;
   }
+  // A note embedding itself (or two notes embedding each other) would otherwise be copied N^2 times for N embeds.
+  const key = link.heading === undefined ? resolved : `${resolved}#${body.line}`;
+  if (env.stack.includes(key)) return inline(renderInternalLink(link, env));
+  env.budget.embeds--;
   const title = link.heading !== undefined ? `${noteTitle(resolved)} > ${link.heading}` : noteTitle(resolved);
-  const inner = renderDocument(body.text, { ...env.ctx, path: resolved }, env.depth + 1, body.line);
+  const inner = renderDocument(body.text, { ...env.ctx, path: resolved }, env.depth + 1, body.line, env.budget, [...env.stack, key]);
   const heading = link.heading !== undefined ? ` data-heading="${escapeHtml(link.heading)}"` : '';
   const lineAttr = line === null ? '' : ` data-line="${escapeHtml(line)}"`;
   return (
@@ -360,9 +376,9 @@ function countLines(text: string): number {
 }
 
 /** Render a note body (front matter stripped) without sanitizing. `depth` > 0 for embedded notes. */
-function renderDocument(content: string, ctx: RenderContext, depth: number, lineOffset: number): string {
+function renderDocument(content: string, ctx: RenderContext, depth: number, lineOffset: number, budget: { embeds: number }, stack: string[]): string {
   const fm = parseFrontmatter(content);
-  const env: RenderEnv = { ctx, depth, lineOffset: lineOffset + countLines(content.slice(0, fm.bodyStart)), slugs: new Map() };
+  const env: RenderEnv = { ctx, depth, lineOffset: lineOffset + countLines(content.slice(0, fm.bodyStart)), slugs: new Map(), budget, stack };
   const props = depth === 0 ? renderProperties(fm.data) : '';
   return props + md.render(content.slice(fm.bodyStart), env);
 }
@@ -372,5 +388,5 @@ const PURIFY_OPTIONS = { ADD_ATTR: ['data-href', 'data-heading', 'data-tag', 'da
 /** Render a note to sanitized HTML for the reading view. */
 export function renderMarkdown(content: string, ctx: RenderContext): string {
   md.set({ breaks: !ctx.strictLineBreaks });
-  return DOMPurify.sanitize(renderDocument(content, ctx, 0, 0), PURIFY_OPTIONS);
+  return DOMPurify.sanitize(renderDocument(content, ctx, 0, 0, { embeds: MAX_EMBEDS }, [ctx.path]), PURIFY_OPTIONS);
 }

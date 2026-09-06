@@ -1,6 +1,7 @@
 import { type Completion, type CompletionSource, pickedCompletion } from '@codemirror/autocomplete';
 import type { EditorView } from '@codemirror/view';
 import type { MetadataIndex } from '../../core/index/MetadataIndex';
+import { TAG_NAME_CHARS } from '../../core/markdown/links';
 import { basename, stripExt } from '../../core/vault/path';
 import type { Vault } from '../../core/vault/Vault';
 import { headingLinkText } from './headingLink';
@@ -14,9 +15,9 @@ export interface CompletionDeps {
 
 const LINK_PREFIX = /\[\[([^[\]\n|#]*)$/;
 const HEADING_PREFIX = /\[\[([^[\]\n|#]*)#([^[\]\n|#]*)$/;
-const TAG_PREFIX = /[\s(]#([\p{L}\p{N}_\-/]*)$/u;
+const TAG_PREFIX = new RegExp(`[\\s(]#([${TAG_NAME_CHARS}]*)$`, 'u');
 const LINK_TEXT = /^[^[\]\n|#]*$/;
-const TAG_TEXT = /^[\p{L}\p{N}_\-/]*$/u;
+const TAG_TEXT = new RegExp(`^[${TAG_NAME_CHARS}]*$`, 'u');
 /** An `|alias]]` or `#heading]]` tail already closing the link right after the cursor. */
 const LINK_TAIL = /^[|#][^\]\n]*\]\]/;
 
