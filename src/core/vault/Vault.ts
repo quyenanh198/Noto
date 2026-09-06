@@ -1,8 +1,14 @@
 import type { StorageAdapter, VaultEvent, VaultFile, VaultSnapshot } from '../types';
-import { applyLinkRewrites, planLinkRewrites, type LinkRewritePlan } from './linkRewrite';
-import { ancestors, basename, dirname, isMarkdown, isWithin, joinPath, normalizePath, stripExt, withMdExt } from './path';
+import { applyLinkRewrites, ownLinkRewrites, planLinkRewrites, planOwnLinks, type LinkRewritePlan } from './linkRewrite';
+import { ancestors, basename, dirname, folderMatchesHint, isMarkdown, isWithin, joinPath, normalizePath, noteKey, stripExt, withMdExt } from './path';
 
 export type VaultListener = (event: VaultEvent) => void;
+
+/** Among files sharing a name, `[[links]]` prefer notes over attachments, then the shortest path, then alphabetical. */
+function closerLink(a: string, b: string): boolean {
+  if (isMarkdown(a) !== isMarkdown(b)) return isMarkdown(a);
+  return a.length < b.length || (a.length === b.length && a < b);
+}
 
 /**
  * In-memory vault of files. All mutations go through here; the storage adapter mirrors them.
@@ -52,6 +58,15 @@ export class Vault {
     return this.files.get(normalizePath(path));
   }
 
+  /** The file at `path`, or the one whose path differs only in case: on macOS and Windows the two are one entry on disk. */
+  findFile(path: string): VaultFile | undefined {
+    const p = normalizePath(path);
+    const exact = this.files.get(p);
+    if (exact) return exact;
+    const variant = this.caseVariantOf(p, this.files.keys(), '');
+    return variant === undefined ? undefined : this.files.get(variant);
+  }
+
   exists(path: string): boolean {
     return this.files.has(normalizePath(path));
   }
@@ -93,9 +108,10 @@ export class Vault {
   }
 
   /**
-   * Resolve a wikilink target to an existing file path, Obsidian-style:
-   * exact path (with or without .md), then relative to the source note's folder,
-   * then any file whose basename matches (shortest path wins). Case-insensitive fallback.
+   * Resolve a wikilink target to an existing file path, Obsidian-style: exact path (with or without .md), then
+   * relative to the source note's folder, then any file with that name (case-insensitive; a folder given in the
+   * target must match whole segments of the file's folder; notes before attachments, then the shortest path).
+   * Only `.md` is implied, so `[[Node.js]]` finds `Node.js.md` and `[[notes.txt]]` finds the attachment.
    */
   resolveLink(target: string, fromPath = ''): string | undefined {
     const raw = normalizePath(target);
@@ -109,23 +125,30 @@ export class Vault {
         if (this.files.has(rel)) return rel;
       }
     }
-    const wantBase = stripExt(basename(raw)).toLowerCase();
+    const wantKey = noteKey(basename(raw)).toLowerCase();
     const wantDir = dirname(raw).toLowerCase();
     let best: string | undefined;
     for (const path of this.files.keys()) {
-      if (!isMarkdown(path)) continue;
-      if (stripExt(basename(path)).toLowerCase() !== wantBase) continue;
-      if (wantDir && !dirname(path).toLowerCase().endsWith(wantDir)) continue;
-      if (best === undefined || path.length < best.length || (path.length === best.length && path < best)) best = path;
+      if (noteKey(basename(path)).toLowerCase() !== wantKey) continue;
+      if (!folderMatchesHint(dirname(path).toLowerCase(), wantDir)) continue;
+      if (best === undefined || closerLink(path, best)) best = path;
     }
     return best;
   }
 
-  /** Obsidian-style shortest unique link text for a file: basename if unique, else full path. */
-  linkTextFor(path: string): string {
-    const title = stripExt(basename(path));
-    const dupes = [...this.files.keys()].filter((p) => stripExt(basename(p)) === title);
-    return dupes.length > 1 ? stripExt(path) : title;
+  /**
+   * Obsidian-style shortest link text for a file, as written from `fromPath`: its name (without `.md` for notes)
+   * when no other file shares that name the way links match it (ignoring case) and it resolves back to the file
+   * from there; otherwise the full path, which always does.
+   */
+  linkTextFor(path: string, fromPath = ''): string {
+    const p = normalizePath(path);
+    const short = noteKey(basename(p));
+    const key = short.toLowerCase();
+    for (const other of this.files.keys()) {
+      if (other !== p && noteKey(basename(other)).toLowerCase() === key) return noteKey(p);
+    }
+    return this.resolveLink(short, fromPath) === p ? short : noteKey(p);
   }
 
   /**
@@ -141,28 +164,60 @@ export class Vault {
     return undefined;
   }
 
+  /**
+   * `path` with each folder segment spelled like the existing folder it matches ignoring case, so a new entry
+   * in `projects/` lands in an existing `Projects/` (in memory as it would on disk) rather than in a look-alike.
+   */
+  private inExistingFolders(path: string): string {
+    const folders = this.getFolders();
+    const segments = path.split('/');
+    let prefix = '';
+    for (const segment of segments.slice(0, -1)) {
+      const candidate = prefix ? `${prefix}/${segment}` : segment;
+      prefix = folders.includes(candidate) ? candidate : (this.caseVariantOf(candidate, folders, '') ?? candidate);
+    }
+    return prefix ? `${prefix}/${segments[segments.length - 1]}` : path;
+  }
+
+  /** Whether a file at `path` exists, ignoring case. */
+  private fileTaken(path: string): boolean {
+    return this.files.has(path) || this.caseVariantOf(path, this.files.keys(), '') !== undefined;
+  }
+
+  /** Register the folders a new path implies, so they outlive their files like explicitly created ones do. */
+  private async registerFolders(path: string): Promise<void> {
+    for (const a of ancestors(path)) {
+      if (this.folders.has(a)) continue;
+      this.folders.add(a);
+      await this.adapter.createFolder(a);
+    }
+  }
+
   // ----- mutations -----
 
   async create(path: string, content = ''): Promise<VaultFile> {
-    const p = normalizePath(path);
+    const p = this.inExistingFolders(normalizePath(path));
     if (!p) throw new Error('Path cannot be empty.');
     if (this.files.has(p)) throw new Error(`File already exists: ${p}`);
+    const clash = this.caseVariantOf(p, this.files.keys(), '');
+    if (clash !== undefined) throw new Error(`File already exists: ${clash}`);
     const file: VaultFile = { path: p, content, mtime: Date.now() };
+    await this.registerFolders(p);
     this.files.set(p, file);
     await this.adapter.writeFile(p, content);
     this.emit({ type: 'create', path: p });
     return file;
   }
 
-  /** Create a note, appending ` 1`, ` 2`... to the name if it already exists. Returns the created path. */
+  /** Create a note, appending ` 1`, ` 2`... to the name if it already exists (in any casing). Returns the created path. */
   async createUnique(path: string, content = ''): Promise<VaultFile> {
     const normalized = normalizePath(path);
     if (!normalized) throw new Error('Path cannot be empty.');
-    let p = withMdExt(normalized);
-    if (this.files.has(p)) {
+    let p = this.inExistingFolders(withMdExt(normalized));
+    if (this.fileTaken(p)) {
       const base = stripExt(p);
       let i = 1;
-      while (this.files.has(`${base} ${i}.md`)) i++;
+      while (this.fileTaken(`${base} ${i}.md`)) i++;
       p = `${base} ${i}.md`;
     }
     return this.create(p, content);
@@ -189,7 +244,7 @@ export class Vault {
 
   async rename(oldPath: string, newPath: string): Promise<void> {
     const from = normalizePath(oldPath);
-    const to = normalizePath(newPath);
+    const to = this.inExistingFolders(normalizePath(newPath));
     const file = this.files.get(from);
     if (!file) throw new Error(`File not found: ${from}`);
     if (from === to) return;
@@ -198,17 +253,22 @@ export class Vault {
     if (clash !== undefined) throw new Error(`File already exists: ${clash}`);
     const moves = new Map([[from, to]]);
     const plan = this.planLinkRewrites(moves);
+    const own = this.planOwnLinks(moves);
+    await this.registerFolders(to);
     this.files.delete(from);
     this.files.set(to, { ...file, path: to, mtime: Date.now() });
     await this.adapter.renameFile(from, to);
     this.emit({ type: 'rename', oldPath: from, newPath: to });
-    await this.rewriteLinks(plan, moves);
+    await this.rewriteLinks(plan, own, moves);
   }
 
   async createFolder(path: string): Promise<void> {
-    const p = normalizePath(path);
+    const p = this.inExistingFolders(normalizePath(path));
     if (!p) return;
     if (this.folderExists(p)) throw new Error(`Folder already exists: ${p}`);
+    const clash = this.caseVariantOf(p, this.getFolders(), '');
+    if (clash !== undefined) throw new Error(`Folder already exists: ${clash}`);
+    await this.registerFolders(p);
     this.folders.add(p);
     await this.adapter.createFolder(p);
     this.emit({ type: 'folder-create', path: p });
@@ -230,16 +290,20 @@ export class Vault {
 
   async renameFolder(oldPath: string, newPath: string): Promise<void> {
     const from = normalizePath(oldPath);
-    const to = normalizePath(newPath);
+    const to = this.inExistingFolders(normalizePath(newPath));
     if (!from || !to) throw new Error('Invalid folder path.');
     if (from === to) return;
-    if (isWithin(to, from)) throw new Error('Cannot move a folder into itself.');
+    // Names that differ only in case are one folder on macOS and Windows, so inside such a variant is inside `from`.
+    const sameEntry = from.toLowerCase() === to.toLowerCase();
+    if (!sameEntry && isWithin(to.toLowerCase(), from.toLowerCase())) throw new Error('Cannot move a folder into itself.');
     if (this.folderExists(to)) throw new Error(`Folder already exists: ${to}`);
     const clash = this.caseVariantOf(to, this.getFolders(), from);
     if (clash !== undefined) throw new Error(`Folder already exists: ${clash}`);
     const moves = new Map<string, string>();
     for (const path of this.files.keys()) if (isWithin(path, from)) moves.set(path, to + path.slice(from.length));
     const plan = this.planLinkRewrites(moves);
+    const own = this.planOwnLinks(moves);
+    await this.registerFolders(to);
     for (const [path, next] of moves) {
       const file = this.files.get(path)!;
       this.files.delete(path);
@@ -253,7 +317,7 @@ export class Vault {
     this.folders.add(to);
     await this.adapter.renameFolder(from, to);
     this.emit({ type: 'folder-rename', oldPath: from, newPath: to });
-    await this.rewriteLinks(plan, moves);
+    await this.rewriteLinks(plan, own, moves);
   }
 
   /** Links that point at notes about to move (old path -> new path), found while those notes are still in place. */
@@ -261,13 +325,26 @@ export class Vault {
     return planLinkRewrites(this.getMarkdownFiles(), moves, (target, from) => this.resolveLink(target, from));
   }
 
-  /** Rewrite the planned links now that the notes have moved, so `[[Old]]` becomes `[[New]]` like in Obsidian. */
-  private async rewriteLinks(plan: LinkRewritePlan, moves: ReadonlyMap<string, string>): Promise<void> {
-    for (const [source, rewrites] of plan) {
+  /** What the links written in the notes about to move resolve to, found while those notes are still in place. */
+  private planOwnLinks(moves: ReadonlyMap<string, string>): LinkRewritePlan {
+    const moved = [...moves.keys()].filter((p) => isMarkdown(p)).map((p) => this.files.get(p)!);
+    return planOwnLinks(moved, (target, from) => this.resolveLink(target, from));
+  }
+
+  /**
+   * Rewrite links now that the notes have moved: links to a moved note become `[[New]]` like in Obsidian, and a
+   * moved note's own links keep pointing at the notes they did from its old folder.
+   */
+  private async rewriteLinks(plan: LinkRewritePlan, own: LinkRewritePlan, moves: ReadonlyMap<string, string>): Promise<void> {
+    const resolve = (target: string, from: string) => this.resolveLink(target, from);
+    for (const source of new Set([...plan.keys(), ...own.keys()])) {
       const path = moves.get(source) ?? source;
       const file = this.files.get(path);
       if (!file) continue;
-      const next = applyLinkRewrites(path, file.content, rewrites, (p) => this.linkTextFor(p));
+      const rewrites = new Map(plan.get(source));
+      const before = own.get(source);
+      if (before) for (const [raw, target] of ownLinkRewrites(path, file.content, before, moves, resolve)) rewrites.set(raw, target);
+      const next = applyLinkRewrites(path, file.content, rewrites, (p) => this.linkTextFor(p, path));
       if (next !== file.content) await this.modify(path, next);
     }
   }

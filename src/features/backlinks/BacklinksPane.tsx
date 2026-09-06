@@ -144,7 +144,7 @@ function UnlinkedItem({ target, mention }: { target: string; mention: UnlinkedMe
     e.stopPropagation();
     const file = app.vault.getFile(mention.path);
     if (!file || file.content.slice(mention.start, mention.end) !== mention.text) return;
-    const replacement = wikilinkFor(app.vault.linkTextFor(target), mention.text);
+    const replacement = wikilinkFor(app.vault.linkTextFor(target, mention.path), mention.text);
     await app.vault.modify(mention.path, file.content.slice(0, mention.start) + replacement + file.content.slice(mention.end));
   };
 

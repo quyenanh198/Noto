@@ -1,7 +1,7 @@
 import { type Completion, type CompletionSource, pickedCompletion } from '@codemirror/autocomplete';
 import type { EditorView } from '@codemirror/view';
 import type { MetadataIndex } from '../../core/index/MetadataIndex';
-import { basename, stripExt } from '../../core/vault/path';
+import { basename, noteKey } from '../../core/vault/path';
 import type { Vault } from '../../core/vault/Vault';
 import { headingLinkText } from './headingLink';
 
@@ -44,14 +44,15 @@ function applyLinkText(view: EditorView, completion: Completion, from: number, t
 
 /** Link text per note, following the same rule as `Vault.linkTextFor` but computed in one pass. */
 export function noteCompletions(vault: Vault, index: MetadataIndex): Completion[] {
+  // Names are counted the way `Vault.resolveLink` matches them: ignoring case, with only `.md` implied.
   const counts = new Map<string, number>();
   for (const f of vault.getFiles()) {
-    const title = stripExt(basename(f.path));
-    counts.set(title, (counts.get(title) ?? 0) + 1);
+    const key = noteKey(basename(f.path)).toLowerCase();
+    counts.set(key, (counts.get(key) ?? 0) + 1);
   }
   const options: Completion[] = vault.getMarkdownFiles().map((f) => {
-    const title = stripExt(basename(f.path));
-    return { label: (counts.get(title) ?? 0) > 1 ? stripExt(f.path) : title, detail: f.path, type: 'note', apply: applyLinkText };
+    const title = noteKey(basename(f.path));
+    return { label: (counts.get(title.toLowerCase()) ?? 0) > 1 ? noteKey(f.path) : title, detail: f.path, type: 'note', apply: applyLinkText };
   });
   for (const u of index.getUnresolvedLinks()) {
     options.push({ label: u.target, detail: 'new', type: 'unresolved', boost: -1, apply: applyLinkText });

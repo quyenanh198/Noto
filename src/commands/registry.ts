@@ -90,6 +90,12 @@ export class CommandRegistry {
     return this.commands.get(id);
   }
 
+  /** Label with the command's hotkey as bound on this platform, e.g. "Create new note (Ctrl+Alt+N)" or "… (⌘⌥N)". */
+  withHotkey(label: string, commandId: string): string {
+    const hotkey = this.commands.get(commandId)?.hotkey;
+    return hotkey ? `${label} (${formatHotkey(hotkey)})` : label;
+  }
+
   /** Commands available right now, sorted by name. */
   list(): Command[] {
     return [...this.commands.values()]

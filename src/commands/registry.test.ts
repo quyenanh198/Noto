@@ -38,6 +38,15 @@ describe('CommandRegistry', () => {
     expect(calls).toEqual(['a', 'b', 'b']);
   });
 
+  it('labels commands with their hotkey as bound on this platform', () => {
+    const reg = new CommandRegistry();
+    reg.register({ id: 'search:open', name: 'Search', hotkey: 'Mod+Shift+F', callback: () => {} });
+    reg.register({ id: 'plain', name: 'Plain', callback: () => {} });
+    expect(reg.withHotkey('Search', 'search:open')).toBe('Search (Ctrl+Shift+F)');
+    expect(reg.withHotkey('Plain', 'plain')).toBe('Plain');
+    expect(reg.withHotkey('Missing', 'nope')).toBe('Missing');
+  });
+
   it('leaves events another handler already consumed alone', () => {
     const reg = new CommandRegistry();
     let ran = false;

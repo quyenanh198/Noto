@@ -1,7 +1,6 @@
 import { useEffect } from 'react';
 import { app, bootstrap } from './app';
 import { registerCoreCommands } from './commands/coreCommands';
-import { formatHotkey } from './commands/registry';
 import { Icons } from './components/icons';
 import { noteTitle } from './core/vault/path';
 import { BacklinksPane } from './features/backlinks/BacklinksPane';
@@ -21,12 +20,6 @@ import './styles/theme.css';
 import './styles/app.css';
 
 let bootstrapped: Promise<void> | null = null;
-
-/** Label with the command's hotkey as bound on this platform, e.g. "Create new note (Ctrl+Alt+N)". */
-function withHotkey(label: string, commandId: string): string {
-  const hotkey = app.commands.get(commandId)?.hotkey;
-  return hotkey ? `${label} (${formatHotkey(hotkey)})` : label;
-}
 
 export default function App() {
   const ready = useWorkspace((s) => s.ready);
@@ -79,13 +72,13 @@ function Ribbon() {
       <button className={`clickable-icon ${ws.leftSidebarOpen && ws.leftTab === 'files' ? 'is-active' : ''}`} title="Files" aria-label="Files" onClick={() => toggleLeft('files')}>
         <Icons.files />
       </button>
-      <button className={`clickable-icon ${ws.leftSidebarOpen && ws.leftTab === 'search' ? 'is-active' : ''}`} title="Search (Ctrl+Shift+F)" aria-label="Search" onClick={() => toggleLeft('search')}>
+      <button className={`clickable-icon ${ws.leftSidebarOpen && ws.leftTab === 'search' ? 'is-active' : ''}`} title={app.commands.withHotkey('Search', 'search:open')} aria-label="Search" onClick={() => toggleLeft('search')}>
         <Icons.search />
       </button>
       <button className={`clickable-icon ${ws.leftSidebarOpen && ws.leftTab === 'tags' ? 'is-active' : ''}`} title="Tags" aria-label="Tags" onClick={() => toggleLeft('tags')}>
         <Icons.tag />
       </button>
-      <button className={`clickable-icon ${ws.graphOpen ? 'is-active' : ''}`} title="Open graph view (Ctrl+G)" aria-label="Graph view" onClick={() => ws.setGraphOpen(!ws.graphOpen)}>
+      <button className={`clickable-icon ${ws.graphOpen ? 'is-active' : ''}`} title={app.commands.withHotkey('Open graph view', 'graph:open')} aria-label="Graph view" onClick={() => ws.setGraphOpen(!ws.graphOpen)}>
         <Icons.graph />
       </button>
       <button className="clickable-icon" title="Open today's daily note" aria-label="Daily note" onClick={() => void app.commands.execute('daily-note:open')}>
@@ -173,16 +166,16 @@ function Workspace() {
           {ws.graphOpen ? 'Graph view' : active ? active : ''}
         </div>
         <div className="view-header-actions">
-          <button className="clickable-icon" title={withHotkey('Navigate back', 'nav:back')} aria-label="Navigate back" onClick={ws.goBack} disabled={ws.historyIndex <= 0}>
+          <button className="clickable-icon" title={app.commands.withHotkey('Navigate back', 'nav:back')} aria-label="Navigate back" onClick={ws.goBack} disabled={ws.historyIndex <= 0}>
             <Icons.arrowLeft />
           </button>
-          <button className="clickable-icon" title={withHotkey('Navigate forward', 'nav:forward')} aria-label="Navigate forward" onClick={ws.goForward} disabled={ws.historyIndex >= ws.history.length - 1}>
+          <button className="clickable-icon" title={app.commands.withHotkey('Navigate forward', 'nav:forward')} aria-label="Navigate forward" onClick={ws.goForward} disabled={ws.historyIndex >= ws.history.length - 1}>
             <Icons.arrowRight />
           </button>
           {active && !ws.graphOpen && (
             <button
               className="clickable-icon"
-              title={mode === 'source' ? 'Switch to reading view (Ctrl+E)' : 'Switch to editing view (Ctrl+E)'}
+              title={app.commands.withHotkey(mode === 'source' ? 'Switch to reading view' : 'Switch to editing view', 'view:toggle-mode')}
               aria-label={mode === 'source' ? 'Reading view' : 'Editing view'}
               data-testid="toggle-view-mode"
               onClick={ws.toggleViewMode}
@@ -214,9 +207,9 @@ function EmptyState() {
   return (
     <div className="empty-state" data-testid="empty-state">
       <div className="empty-title">No file is open</div>
-      <button onClick={() => void app.commands.execute('file:new')}>{withHotkey('Create new note', 'file:new')}</button>
-      <button onClick={() => void app.commands.execute('switcher:open')}>Open quick switcher (Ctrl+O)</button>
-      <button onClick={() => void app.commands.execute('graph:open')}>Open graph view (Ctrl+G)</button>
+      <button onClick={() => void app.commands.execute('file:new')}>{app.commands.withHotkey('Create new note', 'file:new')}</button>
+      <button onClick={() => void app.commands.execute('switcher:open')}>{app.commands.withHotkey('Open quick switcher', 'switcher:open')}</button>
+      <button onClick={() => void app.commands.execute('graph:open')}>{app.commands.withHotkey('Open graph view', 'graph:open')}</button>
     </div>
   );
 }
@@ -254,7 +247,7 @@ function TabBar() {
           </button>
         </div>
       ))}
-      <button className="clickable-icon tab-new" title={withHotkey('New note', 'file:new')} aria-label="New note" onClick={() => void app.commands.execute('file:new')}>
+      <button className="clickable-icon tab-new" title={app.commands.withHotkey('New note', 'file:new')} aria-label="New note" onClick={() => void app.commands.execute('file:new')}>
         <Icons.plus />
       </button>
     </div>

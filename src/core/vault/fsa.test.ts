@@ -287,6 +287,55 @@ describe('FileSystemAccessAdapter on case-insensitive file systems', () => {
     expect(vault.getFiles().map((f) => f.path)).toEqual(['Bar.md', 'Docs/d.md', 'Foo.md', 'Other/o.md']);
   });
 
+  it('refuses to create a case variant of an existing note or folder instead of overwriting it', async () => {
+    const root = build({ 'Note.md': '# Important', 'untitled.md': 'draft', Docs: { 'a.md': 'a' } }, 'Vault', ignoreCase);
+    const vault = new Vault(new FileSystemAccessAdapter(root));
+    await vault.load();
+    await expect(vault.create('note.md', 'imported body')).rejects.toThrow(/already exists/);
+    await expect(vault.createFolder('docs')).rejects.toThrow(/already exists/);
+    expect((await vault.createUnique('Untitled.md')).path).toBe('Untitled 1.md');
+    // A new note inside a folder spelled differently lands in the existing folder, in memory as on disk.
+    expect((await vault.createUnique('docs/Lowercase')).path).toBe('Docs/Lowercase.md');
+    expect(vault.getFolders()).toEqual(['Docs']);
+    expect(dump(root)).toEqual({ 'Note.md': '# Important', 'untitled.md': 'draft', 'Untitled 1.md': '', 'Docs/': '', 'Docs/a.md': 'a', 'Docs/Lowercase.md': '' });
+    await vault.load();
+    expect(Object.fromEntries(vault.getFiles().map((f) => [f.path, f.content]))).toEqual({
+      'Docs/Lowercase.md': '',
+      'Docs/a.md': 'a',
+      'Note.md': '# Important',
+      'Untitled 1.md': '',
+      'untitled.md': 'draft',
+    });
+  });
+
+  it('refuses to move a folder into what is the same folder on disk', async () => {
+    const tree: Tree = { notes: { 'n1.md': '1', Sub: { 'deep.md': 'd' } }, 'Keep.md': 'k' };
+    const root = build(tree, 'Vault', ignoreCase);
+    const adapter = new FileSystemAccessAdapter(root);
+    await adapter.load();
+    await expect(adapter.renameFolder('notes', 'Notes/notes')).rejects.toThrow(/into itself/);
+    await expect(adapter.renameFolder('notes', 'NOTES/Sub/x')).rejects.toThrow(/into itself/);
+    expect(dump(root)).toEqual(dump(build(tree)));
+    // The vault refuses too, before anything is written.
+    const vault = new Vault(adapter);
+    await vault.load();
+    await expect(vault.renameFolder('notes', 'Notes/notes')).rejects.toThrow(/into itself/);
+    expect(vault.getFiles().map((f) => f.path).sort()).toEqual(['Keep.md', 'notes/Sub/deep.md', 'notes/n1.md']);
+    expect(dump(root)).toEqual(dump(build(tree)));
+  });
+
+  it('asks the browser whether the destination is inside the source when the names differ', async () => {
+    const composed = 'Café';
+    const decomposed = 'Café';
+    const tree: Tree = { [composed]: { 'x.md': 'x', Sub: { 'y.md': 'y' } } };
+    const root = build(tree, 'Vault', nfc);
+    const adapter = new FileSystemAccessAdapter(root);
+    await adapter.load();
+    await expect(adapter.renameFolder(composed, `${decomposed}/Moved`)).rejects.toThrow(/into itself/);
+    await expect(adapter.renameFolder(composed, `${decomposed}/Sub/Deeper`)).rejects.toThrow(/into itself/);
+    expect(dump(root)).toEqual(dump(build(tree)));
+  });
+
   it('goes through a temporary name whenever the browser reports both names as one entry', async () => {
     const composed = 'Caf\u00e9';
     const decomposed = 'Cafe\u0301';

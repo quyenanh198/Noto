@@ -1,5 +1,5 @@
 import { fuzzyFilter } from '../../core/search/fuzzy';
-import { basename, dirname, isMarkdown, normalizePath, noteTitle, validateName } from '../../core/vault/path';
+import { basename, dirname, folderMatchesHint, isMarkdown, normalizePath, noteTitle, validateName } from '../../core/vault/path';
 
 export type SwitcherItem =
   | { kind: 'note'; path: string; title: string }
@@ -77,7 +77,8 @@ export function switcherRows(query: string, src: SwitcherSource): SwitcherRow[] 
 
 /**
  * Whether a wikilink to `name` (a normalized note path without extension) would already resolve to a candidate:
- * same title, and when the query names a folder, a note whose folder ends with it (case-insensitive).
+ * same title, and when the query names a folder, a note whose folder ends with it (case-insensitive), following
+ * the same rule as `Vault.resolveLink`.
  */
 function isTaken(name: string, candidates: Candidate[]): boolean {
   const lower = name.toLowerCase();
@@ -87,7 +88,6 @@ function isTaken(name: string, candidates: Candidate[]): boolean {
   return candidates.some((c) => {
     if (c.kind === 'unresolved') return normalizePath(c.title).toLowerCase() === lower;
     if (c.title.toLowerCase() !== wantTitle) return false;
-    const dir = dirname(c.path).toLowerCase();
-    return !wantDir || dir === wantDir || dir.endsWith(`/${wantDir}`);
+    return folderMatchesHint(dirname(c.path).toLowerCase(), wantDir);
   });
 }

@@ -158,7 +158,7 @@ function EditorSection() {
   ];
   return (
     <>
-      <SettingItem name="Default view for new tabs" description="Notes open in this view unless you switch it for a specific note (Ctrl/Cmd+E).">
+      <SettingItem name="Default view for new tabs" description={`${app.commands.withHotkey('Notes open in this view unless you switch it for a specific note', 'view:toggle-mode')}.`}>
         <Segmented value={defaultViewMode} options={modes} label="Default view mode" onChange={setDefaultViewMode} />
       </SettingItem>
       <SettingItem name="Readable line length" description="Limit the maximum line width so long paragraphs stay easy to read.">
@@ -342,7 +342,10 @@ function AboutSection() {
         <li>
           Tag notes inline with <code>#tags</code> or in YAML front matter.
         </li>
-        <li>Use the quick switcher (Ctrl/Cmd+O) to jump between notes and the command palette (Ctrl/Cmd+P) for everything else.</li>
+        <li>
+          {app.commands.withHotkey('Use the quick switcher', 'switcher:open')} to jump between notes and {app.commands.withHotkey('the command palette', 'palette:open')} for everything
+          else.
+        </li>
         <li>Open a folder from the Vault section to keep your notes on disk as regular files.</li>
       </ul>
     </div>

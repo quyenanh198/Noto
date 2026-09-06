@@ -14,7 +14,8 @@ export function ImportButton() {
     if (files.length === 0) return;
     setBusy(true);
     try {
-      const plan = planImport(files, (path) => app.vault.exists(path));
+      // A path that differs only in case from an existing file is the same entry to the vault (as on macOS and Windows).
+      const plan = planImport(files, (path) => app.vault.findFile(path) !== undefined);
       let imported = 0;
       for (const { file, path } of plan.create) {
         await app.vault.create(path, await file.text());

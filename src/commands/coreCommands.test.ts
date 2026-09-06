@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { app } from '../app';
 import { MemoryAdapter } from '../core/vault/storage';
 import { useWorkspace } from '../state/store';
-import { openLink, registerCoreCommands } from './coreCommands';
+import { openLink, registerCoreCommands, todayStamp } from './coreCommands';
 
 describe('openLink', () => {
   beforeEach(async () => {
@@ -48,6 +48,15 @@ describe('core commands', () => {
     expect(useWorkspace.getState().searchFocusRequest).toBe(before + 2);
     expect(useWorkspace.getState().leftTab).toBe('search');
     expect(useWorkspace.getState().leftSidebarOpen).toBe(true);
+  });
+
+  it("opens today's daily note even when its folder is spelled with a different case", async () => {
+    const path = `daily/${todayStamp()}.md`;
+    await app.vault.switchAdapter(new MemoryAdapter({ files: [{ path, content: 'wrote a lot today', mtime: 1 }], folders: [] }));
+    expect(await app.commands.execute('daily-note:open')).toBe(true);
+    expect(app.vault.getFiles().map((f) => f.path)).toEqual([path]);
+    expect(app.vault.getFile(path)?.content).toBe('wrote a lot today');
+    expect(useWorkspace.getState().activeFile).toBe(path);
   });
 
   it('keeps new-note and close-tab off the chords browsers reserve', () => {

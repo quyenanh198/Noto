@@ -25,18 +25,21 @@ export function importPath(file: ImportCandidate): string {
   return rel.slice(rel.indexOf('/') + 1);
 }
 
-/** Decide which files to import; existing paths and non-text files are skipped. */
+/**
+ * Decide which files to import; existing paths (as `exists` judges them) and non-text files are skipped, as is a
+ * file that differs only in case from an earlier one: the vault treats such names as one entry, like macOS and Windows do.
+ */
 export function planImport<T extends ImportCandidate>(files: Iterable<T>, exists: (path: string) => boolean): ImportPlan<T> {
   const create: Array<{ file: T; path: string }> = [];
   const taken = new Set<string>();
   let skipped = 0;
   for (const file of files) {
     const path = importPath(file);
-    if (!path || !isTextFile(path) || exists(path) || taken.has(path)) {
+    if (!path || !isTextFile(path) || exists(path) || taken.has(path.toLowerCase())) {
       skipped++;
       continue;
     }
-    taken.add(path);
+    taken.add(path.toLowerCase());
     create.push({ file, path });
   }
   return { create, skipped };
