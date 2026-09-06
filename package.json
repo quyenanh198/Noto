@@ -10,8 +10,7 @@
     "typecheck": "tsc -b",
     "test": "vitest run",
     "test:watch": "vitest",
-    "e2e": "playwright test",
-    "lint": "eslint src --ext .ts,.tsx"
+    "e2e": "playwright test"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.18.0",
