@@ -10,19 +10,24 @@ describe('vaultTransfer', () => {
     expect(importPath({ name: 'x.md', webkitRelativePath: 'Top\\Win\\x.md' })).toBe('Win/x.md');
   });
 
-  it('plans imports skipping existing paths, duplicates and non-text files', () => {
+  it('plans imports skipping existing paths, duplicates, non-text files and hidden entries', () => {
     const files = [
       { name: 'New.md' },
       { name: 'Existing.md' },
       { name: 'New.md' },
       { name: 'photo.png' },
       { name: 'plain.txt', webkitRelativePath: 'Folder/plain.txt' },
+      // A folder vault never lists these, so `exists` cannot protect what is on disk there.
       { name: 'hidden.md', webkitRelativePath: 'Folder/.obsidian/hidden.md' },
+      { name: 'app.json', webkitRelativePath: 'Folder/.obsidian/app.json' },
+      { name: 'Old.md', webkitRelativePath: 'Folder/.trash/Old.md' },
+      { name: 'package.json', webkitRelativePath: 'Folder/node_modules/pkg/package.json' },
+      { name: '.hidden.md' },
     ];
     const plan = planImport(files, (path) => path === 'Existing.md');
-    expect(plan.create.map((c) => c.path)).toEqual(['New.md', 'plain.txt', '.obsidian/hidden.md']);
+    expect(plan.create.map((c) => c.path)).toEqual(['New.md', 'plain.txt']);
     expect(plan.create[0].file).toBe(files[0]);
-    expect(plan.skipped).toBe(3);
+    expect(plan.skipped).toBe(8);
   });
 
   it('formats the summary', () => {

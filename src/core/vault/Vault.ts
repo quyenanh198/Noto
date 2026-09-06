@@ -149,7 +149,13 @@ export class Vault {
     if (this.files.has(p)) throw new Error(`File already exists: ${p}`);
     const file: VaultFile = { path: p, content, mtime: Date.now() };
     this.files.set(p, file);
-    await this.adapter.writeFile(p, content);
+    try {
+      // The backend may hold an entry the vault never listed (a hidden file on disk); it refuses rather than replace it.
+      await this.adapter.createFile(p, content);
+    } catch (error) {
+      if (this.files.get(p) === file) this.files.delete(p);
+      throw error;
+    }
     this.emit({ type: 'create', path: p });
     return file;
   }

@@ -175,6 +175,38 @@ describe('FileSystemAccessAdapter', () => {
     expect(dump(root)['top.md']).toBe('root level');
   });
 
+  it('creates files only where the disk has no entry, including entries load() did not list', async () => {
+    const root = build({ 'Welcome.md': '# Welcome', '.trash': { 'Old.md': 'precious trashed note' }, node_modules: { pkg: { 'package.json': '{"name":"pkg"}' } } });
+    const adapter = new FileSystemAccessAdapter(root);
+    expect((await adapter.load()).files.map((f) => f.path)).toEqual(['Welcome.md']);
+    await adapter.createFile('New.md', 'new');
+    await adapter.createFile('Sub/Deep.md', 'deep');
+    await expect(adapter.createFile('Welcome.md', '')).rejects.toThrow(/File already exists: Welcome\.md/);
+    await expect(adapter.createFile('.trash/Old.md', '')).rejects.toThrow(/File already exists: \.trash\/Old\.md/);
+    await expect(adapter.createFile('node_modules/pkg/package.json', '{}')).rejects.toThrow(/already exists/);
+    expect(dump(root)).toEqual({
+      'Welcome.md': '# Welcome',
+      'New.md': 'new',
+      'Sub/': '',
+      'Sub/Deep.md': 'deep',
+      '.trash/': '',
+      '.trash/Old.md': 'precious trashed note',
+      'node_modules/': '',
+      'node_modules/pkg/': '',
+      'node_modules/pkg/package.json': '{"name":"pkg"}',
+    });
+  });
+
+  it('refuses vault creates that would truncate an unlisted file on disk', async () => {
+    const root = build({ 'Welcome.md': 'w', '.trash': { 'Old.md': 'precious trashed note' } });
+    const vault = new Vault(new FileSystemAccessAdapter(root));
+    await vault.load();
+    await expect(vault.createUnique('.trash/Old')).rejects.toThrow(/already exists/);
+    await expect(vault.create('.trash/Old.md', '')).rejects.toThrow(/already exists/);
+    expect(dump(root)['.trash/Old.md']).toBe('precious trashed note');
+    expect(vault.exists('.trash/Old.md')).toBe(false);
+  });
+
   it('deletes files and reports missing ones', async () => {
     const root = build({ 'a.md': 'a', Sub: { 'b.md': 'b' } });
     const adapter = new FileSystemAccessAdapter(root);

@@ -1,4 +1,6 @@
 import { openDB, type IDBPDatabase } from 'idb';
+// draftJournal imports `vaultLabelFor` from here; the cycle is between functions only, nothing runs at module load.
+import { readDraft, replayDraft } from '../../features/editor/draftJournal';
 import { useWorkspace } from '../../state/store';
 import type { StorageAdapter } from '../types';
 import { FileSystemAccessAdapter, type DirectoryHandle } from './fsa';
@@ -119,18 +121,32 @@ export async function getPendingFolder(): Promise<PendingFolder | null> {
   return pendingFolderFrom(await loadVaultChoice());
 }
 
-/** Point the running app at another adapter: reload, rebuild the index, and start from the first note. */
+/** Point the running app at another adapter: reload, rebuild the index, and start from the recovered or first note. */
 export async function activateVault(host: VaultHost, adapter: StorageAdapter): Promise<void> {
   const ws = useWorkspace.getState();
   // Close the tabs first: the editors unmount and flush their pending edits into the vault that is still current.
   ws.closeAllTabs();
   await host.vault.switchAdapter(adapter);
+  // After a browser restart a folder vault is reopened here (its permission must be granted again) and not by
+  // `bootstrap`, so this is the only chance to replay what was typed into it right before the last unload.
+  const recovered = await recoverDraft(host.vault);
   host.index.attach();
   // Anything opened from the explorer while the new vault was loading belonged to the old one.
   ws.closeAllTabs();
   ws.setVaultLabel(vaultLabelFor(adapter));
-  const first = host.vault.getFile('Welcome.md') ?? host.vault.getMarkdownFiles()[0];
+  const first = (recovered && host.vault.getFile(recovered)) || host.vault.getFile('Welcome.md') || host.vault.getMarkdownFiles()[0];
   if (first) ws.openFile(first.path);
+}
+
+/** Replay the draft journal into the freshly loaded vault; returns the path of the note it restored, if any. */
+async function recoverDraft(vault: Vault): Promise<string | null> {
+  const path = readDraft()?.path ?? null;
+  try {
+    return (await replayDraft(vault)) ? path : null;
+  } catch (error) {
+    console.error(error);
+    return null;
+  }
 }
 
 async function connectFolder(host: VaultHost, handle: DirectoryHandle): Promise<void> {
@@ -162,7 +178,7 @@ export async function reconnectFolder(host: VaultHost, pending: PendingFolder): 
 }
 
 /** Switch back to the vault kept in the browser and forget the folder handle. */
-export async function useBrowserVault(host: VaultHost): Promise<void> {
+export async function switchToBrowserVault(host: VaultHost): Promise<void> {
   await saveVaultChoice({ kind: 'indexeddb' });
   await activateVault(host, getBrowserAdapter());
 }

@@ -74,6 +74,20 @@ export function ancestors(path: string): string[] {
   return out;
 }
 
+/**
+ * Entries a folder vault never lists (see `walk()` in fsa.ts): dot names such as `.obsidian`, `.git` or `.trash`, and
+ * `node_modules`. Nothing may be created under them either: it would be invisible after the next load, and could
+ * silently replace whatever is on disk there.
+ */
+export function isHiddenName(name: string): boolean {
+  return name.startsWith('.') || name === 'node_modules';
+}
+
+/** Whether any segment of a vault path is a hidden name. */
+export function hasHiddenSegment(path: string): boolean {
+  return normalizePath(path).split('/').some(isHiddenName);
+}
+
 const INVALID_NAME = /[\\/:*?"<>|#^[\]]/;
 
 /** Validate a single file or folder name (not a path). Returns an error message or null. */
@@ -82,6 +96,7 @@ export function validateName(name: string): string | null {
   if (!n) return 'Name cannot be empty.';
   if (n === '.' || n === '..') return 'Invalid name.';
   if (INVALID_NAME.test(n)) return 'Name contains invalid characters: \\ / : * ? " < > | # ^ [ ]';
+  if (isHiddenName(n)) return 'Hidden names (starting with "." or "node_modules") cannot be used.';
   return null;
 }
 

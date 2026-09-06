@@ -16,6 +16,10 @@ export class MemoryAdapter implements StorageAdapter {
   async load(): Promise<VaultSnapshot> {
     return { files: [...this.files.values()].map((f) => ({ ...f })), folders: [...this.folders] };
   }
+  async createFile(path: string, content: string): Promise<void> {
+    if (this.files.has(path)) throw new Error(`File already exists: ${path}`);
+    await this.writeFile(path, content);
+  }
   async writeFile(path: string, content: string): Promise<void> {
     this.files.set(path, { path, content, mtime: Date.now() });
   }
@@ -77,6 +81,19 @@ export class IndexedDBAdapter implements StorageAdapter {
     const files = await db.getAll('files');
     const folders = (await db.getAll('folders')).map((f) => f.path);
     return { files, folders };
+  }
+
+  async createFile(path: string, content: string): Promise<void> {
+    const db = await this.dbPromise;
+    try {
+      await db.add('files', { path, content, mtime: Date.now() });
+    } catch (error) {
+      // Checked by name: the DOMException may come from another realm (the test double does) and fail `instanceof`.
+      if (typeof error === 'object' && error !== null && (error as { name?: unknown }).name === 'ConstraintError') {
+        throw new Error(`File already exists: ${path}`);
+      }
+      throw error;
+    }
   }
 
   async writeFile(path: string, content: string): Promise<void> {
