@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { app } from '../../app';
 import { formatHotkey } from '../../commands/registry';
 import { Icons } from '../../components/icons';
+import { errorMessage } from '../../core/util';
 import {
   BROWSER_VAULT_LABEL,
   getPendingFolder,
@@ -220,7 +221,7 @@ function VaultSection() {
       const result = await action();
       if (result !== false) setStatus({ text: `${label}: now using "${useWorkspace.getState().vaultLabel}".` });
     } catch (error) {
-      setStatus({ text: error instanceof Error ? error.message : String(error), error: true });
+      setStatus({ text: errorMessage(error), error: true });
     } finally {
       setBusy(false);
       refreshPending();
