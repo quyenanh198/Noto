@@ -35,7 +35,7 @@ export function OutlinePane({ path }: OutlinePaneProps) {
     <div className="outline-pane" data-testid="outline-pane">
       <div className="pane-header">
         <span>Outline</span>
-        <span className="outline-count">{countNodes(tree)}</span>
+        <span className="pane-count">{countNodes(tree)}</span>
       </div>
       {tree.length === 0 && <div className="pane-empty">No headings in this note.</div>}
       {tree.map((node) => (
@@ -80,7 +80,7 @@ function OutlineItem({ node, depth, path, collapsed, onToggle }: OutlineItemProp
       >
         {hasChildren ? (
           <button
-            className="outline-chevron"
+            className="pane-chevron"
             aria-label={isCollapsed ? 'Expand' : 'Collapse'}
             onClick={(e) => {
               e.stopPropagation();
@@ -90,7 +90,7 @@ function OutlineItem({ node, depth, path, collapsed, onToggle }: OutlineItemProp
             {isCollapsed ? <Icons.chevronRight /> : <Icons.chevronDown />}
           </button>
         ) : (
-          <span className="outline-chevron outline-chevron-spacer" />
+          <span className="pane-chevron is-spacer" />
         )}
         <span className="outline-text">{node.display}</span>
       </div>

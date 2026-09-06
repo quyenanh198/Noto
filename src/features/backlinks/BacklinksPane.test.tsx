@@ -42,7 +42,7 @@ describe('BacklinksPane', () => {
   it('does not run the row action when Enter is pressed on a nested button', async () => {
     const { container, unmount } = openWelcome();
     keydown(container.querySelector('button[aria-label="Link to Welcome"]')!, 'Enter');
-    keydown(container.querySelector('.backlink-group-title button.backlinks-chevron')!, 'Enter');
+    keydown(container.querySelector('.backlink-group-title button.pane-chevron')!, 'Enter');
     await flush();
     expect(useWorkspace.getState().activeFile).toBe('Welcome.md');
     expect(app.vault.getFile('Mention.md')?.content).toBe('[[Welcome]] one\nWelcome two\nWelcome three');

@@ -66,7 +66,7 @@ export function BacklinksPane({ path }: BacklinksPaneProps) {
     <div className="backlinks-pane" data-testid="backlinks-pane">
       <div className="pane-header">
         <span>Linked mentions</span>
-        <span className="backlinks-count">{linkedCount}</span>
+        <span className="pane-count">{linkedCount}</span>
       </div>
       {backlinks.length === 0 && <div className="pane-empty">No backlinks found.</div>}
       {backlinks.map((b) => (
@@ -75,10 +75,10 @@ export function BacklinksPane({ path }: BacklinksPaneProps) {
 
       <div className="pane-header backlinks-toggle" aria-expanded={showUnlinked} {...activate(() => setShowUnlinked((v) => !v))}>
         <span className="backlinks-toggle-label">
-          <span className="backlinks-chevron">{showUnlinked ? <Icons.chevronDown /> : <Icons.chevronRight />}</span>
+          <span className="pane-chevron">{showUnlinked ? <Icons.chevronDown /> : <Icons.chevronRight />}</span>
           Unlinked mentions
         </span>
-        <span className="backlinks-count">{unlinked.length}</span>
+        <span className="pane-count">{unlinked.length}</span>
       </div>
       {showUnlinked && unlinked.length === 0 && <div className="pane-empty">No unlinked mentions found.</div>}
       {showUnlinked && unlinkedBySource.map(([source, mentions]) => <UnlinkedGroup key={source} target={path} source={source} mentions={mentions} />)}
@@ -91,7 +91,7 @@ function GroupTitle({ source, count, collapsed, onToggle }: { source: string; co
   return (
     <div className="tree-item backlink-group-title" aria-label={noteTitle(source)} {...activate((e) => open(source, e))}>
       <button
-        className="backlinks-chevron"
+        className="pane-chevron"
         aria-label={collapsed ? 'Expand' : 'Collapse'}
         onClick={(e) => {
           e.stopPropagation();
@@ -102,7 +102,7 @@ function GroupTitle({ source, count, collapsed, onToggle }: { source: string; co
       </button>
       <span className="backlink-title">{noteTitle(source)}</span>
       {folder && <span className="backlink-folder">{folder}</span>}
-      <span className="backlinks-count">{count}</span>
+      <span className="pane-count">{count}</span>
     </div>
   );
 }

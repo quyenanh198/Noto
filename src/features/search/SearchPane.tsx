@@ -230,7 +230,7 @@ function ResultGroup({ result, collapsed, headerSelected, rows, selected, onTogg
         {hasMatches ? (
           <button
             type="button"
-            className="search-result-chevron"
+            className="pane-chevron"
             aria-label={`${collapsed ? 'Expand' : 'Collapse'} matches in ${result.title}`}
             aria-expanded={!collapsed}
             onClick={(e) => {
@@ -241,7 +241,7 @@ function ResultGroup({ result, collapsed, headerSelected, rows, selected, onTogg
             {collapsed ? <Icons.chevronRight /> : <Icons.chevronDown />}
           </button>
         ) : (
-          <span className="search-result-chevron" />
+          <span className="pane-chevron is-spacer" />
         )}
         <span className="search-result-title">{result.title}</span>
         {folder && <span className="search-result-path">{folder}</span>}
