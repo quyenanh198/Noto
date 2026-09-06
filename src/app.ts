@@ -4,6 +4,7 @@ import { activateVault, getBrowserAdapter, isSampleVaultSeeded, loadSavedVault, 
 import { Vault } from './core/vault/Vault';
 import { SAMPLE_VAULT } from './core/vault/sampleVault';
 import type { StorageAdapter } from './core/types';
+import { replayDraft } from './features/editor/draftJournal';
 import { useWorkspace } from './state/store';
 
 /** Singleton services shared by the whole UI. */
@@ -57,6 +58,8 @@ export async function bootstrap(): Promise<void> {
     }
     await markSampleVaultSeeded();
   }
+  // Recover what was typed right before the last unload (the editor's debounced save may not have landed).
+  await replayDraft(app.vault).catch((err: unknown) => console.error(err));
   app.index.attach();
   let ws = useWorkspace.getState();
   ws.setVaultLabel(vaultLabelFor(adapter));

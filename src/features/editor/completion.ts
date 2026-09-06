@@ -3,6 +3,7 @@ import type { EditorView } from '@codemirror/view';
 import type { MetadataIndex } from '../../core/index/MetadataIndex';
 import { basename, stripExt } from '../../core/vault/path';
 import type { Vault } from '../../core/vault/Vault';
+import { headingLinkText } from './headingLink';
 
 export interface CompletionDeps {
   vault: Vault;
@@ -16,6 +17,8 @@ const HEADING_PREFIX = /\[\[([^[\]\n|#]*)#([^[\]\n|#]*)$/;
 const TAG_PREFIX = /[\s(]#([\p{L}\p{N}_\-/]*)$/u;
 const LINK_TEXT = /^[^[\]\n|#]*$/;
 const TAG_TEXT = /^[\p{L}\p{N}_\-/]*$/u;
+/** An `|alias]]` or `#heading]]` tail already closing the link right after the cursor. */
+const LINK_TAIL = /^[|#][^\]\n]*\]\]/;
 
 /** Closing brackets to append so a link ends with `]]`, given the text right after the cursor. */
 export function closingBrackets(after: string): string {
@@ -24,12 +27,17 @@ export function closingBrackets(after: string): string {
   return ']]';
 }
 
-/** Insert the label and make sure the link is closed without duplicating brackets that are already there. */
+/**
+ * Insert the label and make sure the link is closed without duplicating brackets that are already there.
+ * When the link goes on with `|alias]]` or `#heading]]`, only the label is replaced and the cursor stays after it.
+ */
 function applyLinkText(view: EditorView, completion: Completion, from: number, to: number): void {
-  const insert = completion.label + closingBrackets(view.state.sliceDoc(to, to + 2));
+  const rest = view.state.sliceDoc(to, view.state.doc.lineAt(to).to);
+  const continues = LINK_TAIL.test(rest);
+  const insert = continues ? completion.label : completion.label + closingBrackets(rest);
   view.dispatch({
     changes: { from, to, insert },
-    selection: { anchor: from + completion.label.length + 2 },
+    selection: { anchor: from + completion.label.length + (continues ? 0 : 2) },
     annotations: pickedCompletion.of(completion),
   });
 }
@@ -65,12 +73,11 @@ export function createCompletionSources({ vault, index, path }: CompletionDeps):
     const target = m.text.slice(2, m.text.indexOf('#')).trim();
     const note = target ? vault.resolveLink(target, path) : path;
     if (!note) return null;
-    const options: Completion[] = (index.getMetadata(note)?.headings ?? []).map((h) => ({
-      label: h.text,
-      detail: `H${h.level}`,
-      type: 'heading',
-      apply: applyLinkText,
-    }));
+    // Headings are inserted in their link-safe form (`A | B` -> `A B`); the popup still shows the original text.
+    const options: Completion[] = (index.getMetadata(note)?.headings ?? []).map((h) => {
+      const label = headingLinkText(h.text);
+      return { label, displayLabel: label === h.text ? undefined : h.text, detail: `H${h.level}`, type: 'heading', apply: applyLinkText };
+    });
     return { from: m.from + m.text.indexOf('#') + 1, options, validFor: LINK_TEXT };
   };
 
