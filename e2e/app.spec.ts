@@ -187,6 +187,40 @@ test.describe('palettes', () => {
     await expect(page.locator('[data-testid="explorer-item"][data-path="Brand new note.md"]')).toBeVisible();
   });
 
+  test('quick switcher refuses unlinkable names and does not duplicate existing paths', async ({ page }) => {
+    await openApp(page);
+    await page.keyboard.press(`${mod}+o`);
+    const input = page.getByTestId('quick-switcher-input');
+    await input.fill('Projects/Noto roadmap');
+    await expect(page.getByTestId('quick-switcher-item')).toHaveCount(1);
+    await expect(page.getByTestId('quick-switcher-item').first()).toHaveClass(/is-note/);
+    await input.fill('Meeting #3');
+    const row = page.getByTestId('quick-switcher-item').first();
+    await expect(row).toHaveClass(/is-invalid/);
+    await expect(row).toContainText('invalid characters');
+    await page.keyboard.press('Enter');
+    await expect(page.getByTestId('quick-switcher')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('[data-testid="explorer-item"][data-path="Meeting #3.md"]')).toHaveCount(0);
+  });
+
+  test('a text drag from the input onto the backdrop keeps the switcher open', async ({ page }) => {
+    await openApp(page);
+    await page.keyboard.press(`${mod}+o`);
+    const input = page.getByTestId('quick-switcher-input');
+    await input.fill('welcome note');
+    const box = (await input.boundingBox())!;
+    const dialog = (await page.getByTestId('quick-switcher').boundingBox())!;
+    await page.mouse.move(box.x + box.width - 4, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(dialog.x - 60, box.y + box.height / 2, { steps: 8 });
+    await page.mouse.up();
+    await expect(page.getByTestId('quick-switcher')).toBeVisible();
+    await expect(input).toHaveValue('welcome note');
+    await page.mouse.click(20, 700);
+    await expect(page.getByTestId('quick-switcher')).toBeHidden();
+  });
+
   test('command palette runs commands', async ({ page }) => {
     await openApp(page);
     await page.keyboard.press(`${mod}+p`);

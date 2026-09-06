@@ -43,6 +43,9 @@ export function Modal<T>(props: ModalProps<T>) {
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const [selected, setSelected] = useState(0);
+  // Whether the current mouse press started on the backdrop itself. A text drag-selection that starts in the
+  // input and ends over the backdrop dispatches its click on the backdrop (the common ancestor) and must not dismiss.
+  const pressedBackdrop = useRef(false);
   const count = items.length;
   const sel = count === 0 ? -1 : Math.min(selected, count - 1);
 
@@ -93,8 +96,12 @@ export function Modal<T>(props: ModalProps<T>) {
   return (
     <div
       className="modal-backdrop"
+      onMouseDown={(e) => {
+        pressedBackdrop.current = e.target === e.currentTarget;
+      }}
       onClick={(e) => {
-        if (e.target === e.currentTarget) closeModal();
+        if (e.target === e.currentTarget && pressedBackdrop.current) closeModal();
+        pressedBackdrop.current = false;
       }}
     >
       <div className="modal palette" role="dialog" aria-modal="true" aria-label={props.label} data-testid={testId}>

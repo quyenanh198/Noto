@@ -64,6 +64,13 @@
 .palette .modal-item.is-create.is-selected {
   color: var(--text-normal);
 }
+.palette .modal-item.is-invalid {
+  color: var(--text-muted);
+  cursor: default;
+}
+.palette-item-error {
+  color: var(--text-error);
+}
 .palette-create-prefix {
   display: inline-block;
   margin-right: 4px;
