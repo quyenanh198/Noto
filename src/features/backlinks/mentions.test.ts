@@ -53,6 +53,33 @@ describe('findUnlinkedMentions', () => {
     const content = 'a\nb\n\nWelcome\nx Welcome';
     expect(findUnlinkedMentions('Welcome', [file('A.md', content)], new Set()).map((m) => m.line)).toEqual([3, 4]);
   });
+
+  it('ignores tags, markdown links, bare urls, autolinks and html tags', () => {
+    const cases = [
+      'Tagged #welcome here.',
+      'Tagged #Welcome/sub here.',
+      'See [Welcome](Welcome.md) too.',
+      'See ![Welcome](Welcome.png) too.',
+      'Visit https://x.example/Welcome/page now.',
+      'Visit <https://x.example/Welcome> now.',
+      '<img src="Welcome.png" alt="Welcome">',
+    ];
+    for (const content of cases) expect(findUnlinkedMentions('Welcome', [file('A.md', content)], new Set()), content).toEqual([]);
+  });
+
+  it('never matches text directly after a hash, even when it is not a valid tag', () => {
+    expect(findUnlinkedMentions('Welcome', [file('A.md', 'a#Welcome and #123Welcome')], new Set())).toEqual([]);
+  });
+
+  it('still matches prose around skipped tags and links', () => {
+    const content = 'Welcome #welcome [Welcome](Welcome.md) https://x/Welcome <b>Welcome</b>\nWelcome again';
+    const found = findUnlinkedMentions('Welcome', [file('A.md', content)], new Set());
+    expect(found.map((m) => [m.line, m.start])).toEqual([
+      [0, 0],
+      [0, content.indexOf('<b>') + 3],
+      [1, content.indexOf('\n') + 1],
+    ]);
+  });
 });
 
 describe('lineContaining', () => {

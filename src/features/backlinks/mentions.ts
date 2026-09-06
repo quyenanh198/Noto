@@ -1,4 +1,4 @@
-import { codeRegions, parseFrontmatter, parseWikiLinks } from '../../core/markdown/links';
+import { codeRegions, parseFrontmatter, parseInlineTags, parseWikiLinks } from '../../core/markdown/links';
 import type { WikiLink } from '../../core/types';
 
 export interface UnlinkedMention {
@@ -65,18 +65,25 @@ function inRegion(index: number, regions: Region[]): boolean {
   return false;
 }
 
-/** Regions that must not be scanned: front matter, code, and existing wikilinks. */
+/** Text that is already a link or markup: markdown links and images, bare or angle-bracketed URLs, HTML tags. */
+const MARKUP = /!?\[[^\]\n]*\]\([^)\n]*\)|<?https?:\/\/\S+|<[^>\n]+>/g;
+
+/** Regions that must not be scanned: front matter, code, existing links, tags, URLs and HTML tags. */
 function skipRegions(content: string): Region[] {
   const regions: Region[] = codeRegions(content);
   const fm = parseFrontmatter(content);
-  if (fm.bodyStart > 0) regions.push([0, fm.bodyStart]);
+  if (fm.bodyStart > 0) regions.unshift([0, fm.bodyStart]);
   for (const link of parseWikiLinks(content, regions)) regions.push([link.position.start, link.position.end]);
+  for (const tag of parseInlineTags(content, regions)) regions.push([tag.position.start, tag.position.end]);
+  MARKUP.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = MARKUP.exec(content))) regions.push([m.index, m.index + m[0].length]);
   return regions.sort((a, b) => a[0] - b[0]);
 }
 
 /**
- * Case-insensitive whole-word occurrences of `title` (or any of `aliases`) in `files`,
- * skipping files in `exclude` and text inside wikilinks, code, or front matter.
+ * Case-insensitive whole-word occurrences of `title` (or any of `aliases`) in `files`, skipping files in
+ * `exclude` and text that is not plain prose: links (wiki and markdown), tags, URLs, HTML, code, front matter.
  */
 export function findUnlinkedMentions(
   title: string,
@@ -86,7 +93,8 @@ export function findUnlinkedMentions(
 ): UnlinkedMention[] {
   const names = [...new Set([title, ...aliases].map((n) => n.trim()).filter(Boolean))].sort((a, b) => b.length - a.length);
   if (names.length === 0) return [];
-  const pattern = new RegExp(`(?<![\\p{L}\\p{N}_])(?:${names.map(escapeRegExp).join('|')})(?![\\p{L}\\p{N}_])`, 'giu');
+  // A leading `#` is never a word boundary here, so a tag body cannot match even when the tag parser rejects it.
+  const pattern = new RegExp(`(?<![\\p{L}\\p{N}_#])(?:${names.map(escapeRegExp).join('|')})(?![\\p{L}\\p{N}_])`, 'giu');
   const out: UnlinkedMention[] = [];
   for (const file of files) {
     if (exclude.has(file.path)) continue;

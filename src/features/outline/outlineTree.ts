@@ -9,6 +9,8 @@ export interface OutlineNode {
   display: string;
   /** 0-based line of the heading. */
   line: number;
+  /** Identity of the heading within its note (level, text, occurrence index); stable while lines shift. */
+  key: string;
   children: OutlineNode[];
 }
 
@@ -31,8 +33,12 @@ export function stripMarkup(text: string): string {
 export function buildOutlineTree(headings: HeadingRef[]): OutlineNode[] {
   const roots: OutlineNode[] = [];
   const stack: OutlineNode[] = [];
+  const seen = new Map<string, number>();
   for (const h of headings) {
-    const node: OutlineNode = { level: h.level, text: h.text, display: stripMarkup(h.text), line: h.position.line, children: [] };
+    const id = `${h.level}:${h.text}`;
+    const nth = seen.get(id) ?? 0;
+    seen.set(id, nth + 1);
+    const node: OutlineNode = { level: h.level, text: h.text, display: stripMarkup(h.text), line: h.position.line, key: `${id}:${nth}`, children: [] };
     while (stack.length > 0 && stack[stack.length - 1].level >= h.level) stack.pop();
     const parent = stack[stack.length - 1];
     (parent ? parent.children : roots).push(node);

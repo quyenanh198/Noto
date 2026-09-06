@@ -10,21 +10,25 @@ export interface OutlinePaneProps {
   path: string;
 }
 
+const NONE: ReadonlySet<string> = new Set();
+
 function countNodes(nodes: OutlineNode[]): number {
   return nodes.reduce((n, node) => n + 1 + countNodes(node.children), 0);
 }
 
 export function OutlinePane({ path }: OutlinePaneProps) {
   const rev = useIndexRevision();
-  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
+  // Collapse state belongs to one note: another note starts fully expanded.
+  const [collapsedIn, setCollapsedIn] = useState<{ path: string; keys: ReadonlySet<string> }>({ path, keys: NONE });
+  const collapsed = collapsedIn.path === path ? collapsedIn.keys : NONE;
   const tree = useMemo(() => buildOutlineTree(app.index.getMetadata(path)?.headings ?? []), [path, rev]);
 
   const toggle = (key: string) =>
-    setCollapsed((prev) => {
-      const next = new Set(prev);
+    setCollapsedIn((prev) => {
+      const next = new Set(prev.path === path ? prev.keys : NONE);
       if (next.has(key)) next.delete(key);
       else next.add(key);
-      return next;
+      return { path, keys: next };
     });
 
   return (
@@ -35,7 +39,7 @@ export function OutlinePane({ path }: OutlinePaneProps) {
       </div>
       {tree.length === 0 && <div className="pane-empty">No headings in this note.</div>}
       {tree.map((node) => (
-        <OutlineItem key={`${node.level}:${node.text}`} node={node} depth={0} path={path} collapsed={collapsed} onToggle={toggle} />
+        <OutlineItem key={node.key} node={node} depth={0} path={path} collapsed={collapsed} onToggle={toggle} />
       ))}
     </div>
   );
@@ -45,15 +49,15 @@ interface OutlineItemProps {
   node: OutlineNode;
   depth: number;
   path: string;
-  collapsed: Set<string>;
+  collapsed: ReadonlySet<string>;
   onToggle: (key: string) => void;
 }
 
 function OutlineItem({ node, depth, path, collapsed, onToggle }: OutlineItemProps) {
-  const key = `${node.level}:${node.text}`;
-  const isCollapsed = collapsed.has(key);
+  const isCollapsed = collapsed.has(node.key);
   const hasChildren = node.children.length > 0;
-  const navigate = () => useWorkspace.getState().openFile(path, { heading: node.text });
+  // Navigate by position: headings with the same text must each reach their own line.
+  const navigate = () => useWorkspace.getState().openFile(path, { line: node.line });
   return (
     <>
       <div
@@ -68,7 +72,10 @@ function OutlineItem({ node, depth, path, collapsed, onToggle }: OutlineItemProp
         title={node.display}
         onClick={navigate}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') navigate();
+          // Enter on the nested chevron is the button's own activation, not the row's.
+          if (e.key !== 'Enter' || e.target !== e.currentTarget) return;
+          e.preventDefault();
+          navigate();
         }}
       >
         {hasChildren ? (
@@ -77,7 +84,7 @@ function OutlineItem({ node, depth, path, collapsed, onToggle }: OutlineItemProp
             aria-label={isCollapsed ? 'Expand' : 'Collapse'}
             onClick={(e) => {
               e.stopPropagation();
-              onToggle(key);
+              onToggle(node.key);
             }}
           >
             {isCollapsed ? <Icons.chevronRight /> : <Icons.chevronDown />}
@@ -89,9 +96,7 @@ function OutlineItem({ node, depth, path, collapsed, onToggle }: OutlineItemProp
       </div>
       {hasChildren &&
         !isCollapsed &&
-        node.children.map((child) => (
-          <OutlineItem key={`${child.level}:${child.text}`} node={child} depth={depth + 1} path={path} collapsed={collapsed} onToggle={onToggle} />
-        ))}
+        node.children.map((child) => <OutlineItem key={child.key} node={child} depth={depth + 1} path={path} collapsed={collapsed} onToggle={onToggle} />)}
     </>
   );
 }

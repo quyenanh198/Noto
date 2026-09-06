@@ -18,14 +18,19 @@ function isNewTab(e: Activation): boolean {
   return e.ctrlKey || e.metaKey;
 }
 
-/** Runs `fn` on click, and on Enter for keyboard users. */
+/**
+ * Runs `fn` on click, and on Enter for keyboard users. Enter on a nested button is that button's own
+ * activation; the key is swallowed so it cannot land in the editor that receives focus afterwards.
+ */
 function activate(fn: (e: Activation) => void) {
   return {
     role: 'button' as const,
     tabIndex: 0,
     onClick: fn,
     onKeyDown: (e: KeyboardEvent) => {
-      if (e.key === 'Enter') fn(e);
+      if (e.key !== 'Enter' || e.target !== e.currentTarget) return;
+      e.preventDefault();
+      fn(e);
     },
   };
 }
@@ -48,9 +53,9 @@ export function BacklinksPane({ path }: BacklinksPaneProps) {
   const backlinks = useMemo(() => app.index.getBacklinks(path), [path, indexRev]);
   const linkedCount = backlinks.reduce((n, b) => n + b.links.length, 0);
   const unlinked = useMemo(() => {
-    const exclude = new Set([path, ...backlinks.map((b) => b.source)]);
-    return findUnlinkedMentions(noteTitle(path), app.vault.getMarkdownFiles(), exclude, noteAliases(path));
-  }, [path, backlinks, vaultRev]);
+    // Only the note itself is skipped: a note that already links here can still mention it in plain text.
+    return findUnlinkedMentions(noteTitle(path), app.vault.getMarkdownFiles(), new Set([path]), noteAliases(path));
+  }, [path, vaultRev]);
   const unlinkedBySource = useMemo(() => {
     const groups = new Map<string, UnlinkedMention[]>();
     for (const m of unlinked) groups.set(m.path, [...(groups.get(m.path) ?? []), m]);

@@ -6,6 +6,10 @@ import { useWorkspace } from '../../state/store';
 import { buildTagTree, sortTagTree, type TagNode, type TagSort } from './tagTree';
 import './tags.css';
 
+function countNodes(nodes: TagNode[]): number {
+  return nodes.reduce((n, node) => n + 1 + countNodes(node.children), 0);
+}
+
 export function TagsPane() {
   const rev = useIndexRevision();
   const [sort, setSort] = useState<TagSort>('name');
@@ -13,6 +17,8 @@ export function TagsPane() {
 
   const tags = useMemo(() => app.index.getTags(), [rev]);
   const tree = useMemo(() => sortTagTree(buildTagTree(tags, (tag) => app.index.getFilesWithTag(tag).length), sort), [tags, sort]);
+  // The tree folds case variants and includes implicit parents, so count what is actually listed.
+  const tagCount = useMemo(() => countNodes(tree), [tree]);
 
   const toggle = (tag: string) =>
     setCollapsed((prev) => {
@@ -30,7 +36,7 @@ export function TagsPane() {
       <div className="pane-header">
         <span className="tags-header-label">
           Tags
-          <span className="tags-count">{tags.length}</span>
+          <span className="tags-count">{tagCount}</span>
         </span>
         <button className={`clickable-icon tags-sort ${sort === 'count' ? 'is-active' : ''}`} title={sortLabel} aria-label={sortLabel} onClick={() => setSort(nextSort)}>
           <SortIcon />
@@ -72,7 +78,10 @@ function TagItem({ node, depth, collapsed, onToggle }: TagItemProps) {
         title={'#' + node.tag}
         onClick={search}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') search();
+          // Enter on the nested chevron is the button's own activation, not the row's.
+          if (e.key !== 'Enter' || e.target !== e.currentTarget) return;
+          e.preventDefault();
+          search();
         }}
       >
         {hasChildren ? (

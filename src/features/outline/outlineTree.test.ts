@@ -26,6 +26,13 @@ describe('buildOutlineTree', () => {
     expect(a).toMatchObject({ level: 1, text: '**Bold** title', display: 'Bold title', line: 2 });
   });
 
+  it('gives headings with the same level and text distinct, position-independent keys', () => {
+    const [a, b] = buildOutlineTree(parseHeadings('## Notes\n\n## Notes'));
+    expect(a.key).not.toBe(b.key);
+    const [c, d] = buildOutlineTree(parseHeadings('intro\n\n## Notes\n\n\n## Notes'));
+    expect([c.key, d.key]).toEqual([a.key, b.key]);
+  });
+
   it('returns an empty tree for no headings', () => {
     expect(buildOutlineTree([])).toEqual([]);
   });
