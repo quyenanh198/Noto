@@ -220,3 +220,81 @@ describe('links and sanitization', () => {
     expect(dom.querySelector('a.internal-link')?.textContent).toBe('<img src=x onerror=alert(3)>');
   });
 });
+
+describe('markdown links', () => {
+  it('renders relative markdown links as internal links', () => {
+    const dom = render('[rel](Other.md) [plain](Other) [deep](Sub/Deep.md#Heading) [enc](My%20Note.md) [missing](Nope.md "title")');
+    const links = [...dom.querySelectorAll('a')];
+    expect(links).toHaveLength(5);
+    for (const l of links) {
+      expect(l.classList.contains('internal-link')).toBe(true);
+      expect(l.getAttribute('href')).toBe('#');
+    }
+    expect(links.map((l) => l.getAttribute('data-href'))).toEqual(['Other', 'Other', 'Sub/Deep', 'My Note', 'Nope']);
+    expect(links[2].getAttribute('data-heading')).toBe('Heading');
+    expect(links[0].hasAttribute('data-heading')).toBe(false);
+    expect(links[0].classList.contains('is-unresolved')).toBe(false);
+    expect(links[4].classList.contains('is-unresolved')).toBe(true);
+    expect(links[4].textContent).toBe('missing');
+  });
+
+  it('turns fragment-only links into same-note heading links', () => {
+    const link = render('# Title\n\n[back](#title)').querySelector('a');
+    expect(link?.classList.contains('internal-link')).toBe(true);
+    expect(link?.getAttribute('data-href')).toBe('');
+    expect(link?.getAttribute('data-heading')).toBe('title');
+    expect(link?.getAttribute('href')).toBe('#');
+  });
+
+  it('keeps links with a scheme external', () => {
+    const dom = render('[a](ftp://host/file) [b](https://x.example) [c](//cdn.example.net/x)');
+    expect(dom.querySelectorAll('a.internal-link')).toHaveLength(0);
+    expect(dom.querySelectorAll('a.external-link[target="_blank"]')).toHaveLength(3);
+  });
+
+  it('does not auto-link file names or bare domains', () => {
+    const dom = render('Open README.md and run main.py, build.sh, lib.rs. Domain example.com, www.example.com, a@b.co. Real https://auto.example.org');
+    const links = [...dom.querySelectorAll('a')];
+    expect(links).toHaveLength(1);
+    expect(links[0].getAttribute('href')).toBe('https://auto.example.org');
+  });
+
+  it('does not parse tags inside a link label', () => {
+    const dom = render('[see #tag here](https://example.com) #real');
+    const links = [...dom.querySelectorAll('a.external-link')];
+    expect(links).toHaveLength(1);
+    expect(links[0].textContent).toBe('see #tag here');
+    expect([...dom.querySelectorAll('a.tag')].map((t) => t.getAttribute('data-tag'))).toEqual(['real']);
+  });
+});
+
+describe('line breaks', () => {
+  it('renders a single newline as a line break unless strict line breaks is on', () => {
+    expect(render('line one\nline two').querySelectorAll('br')).toHaveLength(1);
+    expect(render('para one\n\npara two').querySelectorAll('br')).toHaveLength(0);
+    expect(render('line one\nline two', { strictLineBreaks: true }).querySelectorAll('br')).toHaveLength(0);
+    expect(render('line one  \nline two', { strictLineBreaks: true }).querySelectorAll('br')).toHaveLength(1);
+  });
+});
+
+describe('embed blocks', () => {
+  it('renders an embed-only paragraph as a block without empty paragraphs', () => {
+    const dom = render('intro\n\n![[Sections#Part A]]\n\nafter');
+    const blocks = [...dom.children];
+    expect(blocks.map((b) => b.tagName)).toEqual(['P', 'DIV', 'P']);
+    expect(blocks[1].classList.contains('markdown-embed')).toBe(true);
+    expect(blocks[1].getAttribute('data-line')).toBe('2');
+    expect(blocks[2].getAttribute('data-line')).toBe('4');
+    expect(blocks[2].textContent).toBe('after');
+  });
+
+  it('keeps a source line per embed line and wraps fallback links in a paragraph', () => {
+    const dom = render('![[Sections#Part A]]\n![[Nope]]');
+    const blocks = [...dom.children];
+    expect(blocks.map((b) => b.tagName)).toEqual(['DIV', 'P']);
+    expect(blocks[0].getAttribute('data-line')).toBe('0');
+    expect(blocks[1].getAttribute('data-line')).toBe('1');
+    expect(blocks[1].querySelector('a.internal-link.is-unresolved[data-href="Nope"]')).not.toBeNull();
+    expect(dom.querySelectorAll('p:empty')).toHaveLength(0);
+  });
+});
