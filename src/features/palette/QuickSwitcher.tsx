@@ -31,6 +31,8 @@ function SwitcherDialog() {
   );
 
   const select = (row: SwitcherRow, newTab: boolean) => {
+    // An invalid name is shown disabled: leave the query in place so it can be corrected.
+    if (row.item.kind === 'invalid') return;
     closeModal();
     void openItem(row.item, newTab);
   };
@@ -46,7 +48,7 @@ function SwitcherDialog() {
       onQueryChange={setQuery}
       items={rows}
       itemKey={rowKey}
-      itemAttrs={(row) => ({ 'data-path': itemPath(row.item) })}
+      itemAttrs={(row) => ({ 'data-path': itemPath(row.item), 'aria-disabled': row.item.kind === 'invalid' ? 'true' : undefined })}
       itemClassName={(row) => `is-${row.item.kind}`}
       renderItem={(row) => <SwitcherRowView row={row} />}
       onSelect={select}
@@ -62,14 +64,17 @@ async function openItem(item: SwitcherItem, newTab: boolean): Promise<void> {
     ws.openFile(item.path, { newTab });
   } else if (item.kind === 'unresolved') {
     await openLink(item.target, ws.activeFile, { newTab });
-  } else {
-    const file = await app.vault.createUnique(item.name);
+  } else if (item.kind === 'create') {
+    // `path` was validated and normalised by switcherRows; only names that pass validateName get this far.
+    const file = await app.vault.createUnique(item.path);
     useWorkspace.getState().openFile(file.path, { newTab });
   }
 }
 
 function itemPath(item: SwitcherItem): string {
-  return item.kind === 'unresolved' ? item.target : item.path;
+  if (item.kind === 'unresolved') return item.target;
+  if (item.kind === 'invalid') return item.name;
+  return item.path;
 }
 
 function rowKey(row: SwitcherRow): string {
@@ -87,6 +92,14 @@ function SwitcherRowView({ row }: { row: SwitcherRow }) {
           </span>
           Create &quot;{item.name}&quot;
         </div>
+      </div>
+    );
+  }
+  if (item.kind === 'invalid') {
+    return (
+      <div className="palette-item-main">
+        <div className="palette-item-title">Cannot create &quot;{item.name}&quot;</div>
+        <div className="palette-item-path palette-item-error">{item.reason}</div>
       </div>
     );
   }
