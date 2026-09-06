@@ -1,5 +1,6 @@
 import { useState, type ChangeEvent } from 'react';
 import { app } from '../../app';
+import { errorMessage } from '../../core/util';
 import { importSummary, planImport } from './vaultTransfer';
 
 /**
@@ -22,7 +23,7 @@ export function ImportButton() {
       }
       setStatus({ text: importSummary(imported, plan.skipped) });
     } catch (error) {
-      setStatus({ text: `Import failed: ${error instanceof Error ? error.message : String(error)}`, error: true });
+      setStatus({ text: `Import failed: ${errorMessage(error)}`, error: true });
     } finally {
       setBusy(false);
     }

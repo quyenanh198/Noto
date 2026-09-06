@@ -1,4 +1,5 @@
 import type { StorageAdapter, VaultFile, VaultSnapshot } from '../types';
+import { errorMessage } from '../util';
 import { basename, dirname, extname, isWithin, joinPath, normalizePath } from './path';
 
 /*
@@ -55,10 +56,6 @@ export function shouldSkipEntry(name: string): boolean {
   return name.startsWith('.') || name === 'node_modules';
 }
 
-function describe(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
 /** A sibling name that cannot clash with anything the vault knows: `Note.md` -> `Note.md.k3x9q1.tmp`. */
 function temporaryPath(path: string): string {
   return `${path}.${Math.random().toString(36).slice(2, 8)}.tmp`;
@@ -111,7 +108,7 @@ export class FileSystemAccessAdapter implements StorageAdapter {
       const handle = await dir.getFileHandle(basename(p), { create: true });
       writable = await handle.createWritable();
     } catch (error) {
-      throw new Error(`Cannot write ${p}: ${describe(error)}`);
+      throw new Error(`Cannot write ${p}: ${errorMessage(error)}`);
     }
     await writable.write(content);
     await writable.close();
@@ -123,7 +120,7 @@ export class FileSystemAccessAdapter implements StorageAdapter {
     try {
       await dir.removeEntry(basename(p));
     } catch (error) {
-      throw new Error(`Cannot delete ${p}: ${describe(error)}`);
+      throw new Error(`Cannot delete ${p}: ${errorMessage(error)}`);
     }
   }
 
@@ -160,7 +157,7 @@ export class FileSystemAccessAdapter implements StorageAdapter {
     try {
       await parent.removeEntry(basename(p), { recursive: true });
     } catch (error) {
-      throw new Error(`Cannot delete folder ${p}: ${describe(error)}`);
+      throw new Error(`Cannot delete folder ${p}: ${errorMessage(error)}`);
     }
     this.forgetDirectories(p);
   }
@@ -225,7 +222,7 @@ export class FileSystemAccessAdapter implements StorageAdapter {
       const handle = await dir.getFileHandle(basename(path));
       return (await handle.getFile()).text();
     } catch (error) {
-      throw new Error(`Cannot read ${path}: ${describe(error)}`);
+      throw new Error(`Cannot read ${path}: ${errorMessage(error)}`);
     }
   }
 
@@ -238,7 +235,7 @@ export class FileSystemAccessAdapter implements StorageAdapter {
     try {
       handle = await parent.getDirectoryHandle(basename(path), { create });
     } catch (error) {
-      throw new Error(`Folder not found: ${path} (${describe(error)})`);
+      throw new Error(`Folder not found: ${path} (${errorMessage(error)})`);
     }
     this.dirs.set(path, handle);
     return handle;

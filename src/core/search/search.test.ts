@@ -113,6 +113,20 @@ describe('searchNotes', () => {
     expect(paths('-path:guides links')).toEqual(['Welcome.md']);
   });
 
+  it('matches plain terms containing regex metacharacters literally', () => {
+    const notes = [
+      { path: 'Cpp.md', content: '# C++\n\nC++ (notes) and a.b\n' },
+      { path: 'Other.md', content: '# Other\n\nCcc, notes and axb here.\n' },
+    ];
+    const hits = (query: string) => searchNotes(notes, null, query).map((r) => r.path);
+    expect(hits('C++')).toEqual(['Cpp.md']);
+    expect(hits('a.b')).toEqual(['Cpp.md']);
+    expect(hits('(notes)')).toEqual(['Cpp.md']);
+    expect(hits('"C++ (notes)"')).toEqual(['Cpp.md']);
+    const [cpp] = searchNotes(notes, null, 'C++');
+    expect(cpp.matches.map((m) => m.text.slice(m.start, m.end))).toEqual(['C++', 'C++']);
+  });
+
   it('supports regex terms', () => {
     expect(paths('/l[io]nk/')).toEqual(['Guides/Linking notes.md', 'Welcome.md']);
     expect(paths('/^- \\[ \\]/m')).toEqual(['Projects/Roadmap.md']);

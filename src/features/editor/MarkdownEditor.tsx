@@ -4,6 +4,7 @@ import { type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouse
 import { app } from '../../app';
 import { openLink } from '../../commands/coreCommands';
 import { parseHeadings } from '../../core/markdown/links';
+import { errorMessage } from '../../core/util';
 import { dirname, extname, isWithin, joinPath, noteTitle, validateName } from '../../core/vault/path';
 import { type NavigationTarget, useWorkspace } from '../../state/store';
 import { clearDraft, vaultDraftId, writeDraft } from './draftJournal';
@@ -200,7 +201,7 @@ export function MarkdownEditor({ path }: MarkdownEditorProps) {
       await app.vault.rename(path, renamedNotePath(path, next));
     } catch (err) {
       resetTitle();
-      setTitleError(err instanceof Error ? err.message : String(err));
+      setTitleError(errorMessage(err));
     }
   };
 

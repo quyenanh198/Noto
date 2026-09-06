@@ -1,4 +1,5 @@
 import { parseFrontmatter } from '../markdown/links';
+import { escapeRegExp } from '../util';
 import { basename, noteTitle } from '../vault/path';
 
 /*
@@ -186,10 +187,6 @@ interface Evaluation {
 type Evaluator = (file: SearchFile, title: string) => Evaluation;
 
 const NO_HIT: Evaluation = { hit: false, ranges: [], titleHit: false };
-
-function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
 
 function regexFlags(userFlags: string, matchCase: boolean): string {
   const flags = new Set(['g', ...userFlags]);

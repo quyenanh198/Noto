@@ -1,5 +1,6 @@
 import { codeRegions, parseFrontmatter, parseInlineTags, parseWikiLinks } from '../../core/markdown/links';
 import type { WikiLink } from '../../core/types';
+import { escapeRegExp } from '../../core/util';
 
 export interface UnlinkedMention {
   path: string;
@@ -51,10 +52,6 @@ export function linkSnippets(content: string, links: WikiLink[]): Snippet[] {
 /** The wikilink that replaces a mention: `[[Link]]`, or `[[Link|as written]]` when the text differs. */
 export function wikilinkFor(linkText: string, text: string): string {
   return text === linkText ? `[[${linkText}]]` : `[[${linkText}|${text}]]`;
-}
-
-function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function inRegion(index: number, regions: Region[]): boolean {

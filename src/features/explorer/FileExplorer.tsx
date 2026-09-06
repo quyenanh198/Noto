@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type
 import { app } from '../../app';
 import { createNewNote } from '../../commands/coreCommands';
 import { Icons } from '../../components/icons';
+import { errorMessage } from '../../core/util';
 import { useVaultRevision } from '../../state/hooks';
 import { useWorkspace } from '../../state/store';
 import { ContextMenu, type MenuItem } from './ContextMenu';
@@ -43,10 +44,6 @@ function saveExpanded(expanded: ReadonlySet<string>, folders: readonly string[])
   } catch {
     // Storage may be unavailable; expansion state is a convenience only.
   }
-}
-
-function errorMessage(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
 }
 
 interface MenuState {
