@@ -3,6 +3,7 @@ import { EditorView } from '@codemirror/view';
 import { type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { app } from '../../app';
 import { openLink } from '../../commands/coreCommands';
+import { parseHeadings } from '../../core/markdown/links';
 import { dirname, isWithin, joinPath, noteTitle, validateName } from '../../core/vault/path';
 import { type NavigationTarget, useWorkspace } from '../../state/store';
 import { EDITOR_COMMANDS, registerEditorCommands } from './editorCommands';
@@ -243,11 +244,7 @@ function findHeadingLine(view: EditorView, path: string, heading: string): numbe
   const wanted = heading.trim().toLowerCase();
   const indexed = app.index.getMetadata(path)?.headings.find((h) => h.text.toLowerCase() === wanted);
   if (indexed) return indexed.position.line;
-  for (let n = 1; n <= view.state.doc.lines; n++) {
-    const m = /^#{1,6}[ \t]+(.+?)[ \t]*#*[ \t]*$/.exec(view.state.doc.line(n).text);
-    if (m && m[1].trim().toLowerCase() === wanted) return n - 1;
-  }
-  return undefined;
+  return parseHeadings(view.state.doc.toString()).find((h) => h.text.toLowerCase() === wanted)?.position.line;
 }
 
 /** Put the cursor on the target and scroll it to the top. Returns the 0-based line, or null when there is none. */

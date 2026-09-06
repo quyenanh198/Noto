@@ -105,6 +105,13 @@ describe('MetadataIndex', () => {
     expect(vault.getFile('Welcome.md')?.content).toContain('[[Linked notes]] explains links');
   });
 
+  it('does not index heading links or alias text as tags', async () => {
+    const { index } = await setup({ 'A.md': '## Explore\n\nsee [[#Explore]] and [[B|see #x]] #real', 'B.md': '' });
+    expect(index.getTags()).toEqual([{ name: 'real', count: 1 }]);
+    expect(index.getFilesWithTag('Explore')).toEqual([]);
+    expect(index.getGraph({ includeTags: true }).nodes.filter((n) => n.kind === 'tag').map((n) => n.id)).toEqual(['tag:real']);
+  });
+
   it('detaches from the vault', async () => {
     const { vault, index } = await setup({ 'A.md': '' });
     index.detach();

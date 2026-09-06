@@ -121,7 +121,8 @@ function withoutOverlaps(ranges: Range<Decoration>[]): Range<Decoration>[] {
 
 function handleMouseDown(event: MouseEvent, view: EditorView, handlers: LivePreviewHandlers): boolean {
   if (event.button !== 0) return false;
-  const target = event.target instanceof Element ? event.target.closest('.cm-wikilink, .cm-hashtag') : null;
+  // Prefer the enclosing link so a mark nested inside it can never divert the click to the tag branch.
+  const target = event.target instanceof Element ? (event.target.closest('.cm-wikilink') ?? event.target.closest('.cm-hashtag')) : null;
   if (!target) return false;
   const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
   if (pos === null) return false;

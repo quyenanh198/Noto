@@ -74,6 +74,12 @@ describe('collectPreviewSpecs', () => {
     expect(ofKind(specs, 'tag')).toEqual([{ kind: 'tag', from: 6, to: 14, name: 'tag/sub' }]);
   });
 
+  it('does not paint tags inside wikilinks', () => {
+    const specs = specsFor('x [[#Explore]] y [[Other|see #todo]] #real');
+    expect(ofKind(specs, 'tag')).toEqual([{ kind: 'tag', from: 37, to: 42, name: 'real' }]);
+    expect(ofKind(specs, 'wikilink').map((w) => w.target)).toEqual(['', 'Other']);
+  });
+
   it('marks highlights and hides the equals signs', () => {
     const specs = specsFor('a ==hi== b');
     expect(ofKind(specs, 'mark')).toEqual([{ kind: 'mark', from: 4, to: 6, cls: 'cm-highlight' }]);
@@ -155,5 +161,11 @@ describe('lookups at a position', () => {
     expect(wikilinkAt(state, 0)).toBeUndefined();
     expect(tagAt(state, 24)).toMatchObject({ name: 'tag' });
     expect(tagAt(state, 5)).toBeUndefined();
+  });
+
+  it('sees a same-note heading link as a link, not a tag', () => {
+    const state = stateFor('[[#Explore]] #tag');
+    expect(tagAt(state, 4)).toBeUndefined();
+    expect(wikilinkAt(state, 4)).toMatchObject({ target: '', heading: 'Explore' });
   });
 });
