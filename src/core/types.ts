@@ -27,6 +27,9 @@ export type StorageKind = 'memory' | 'indexeddb' | 'fsa';
 export interface StorageAdapter {
   readonly kind: StorageKind;
   load(): Promise<VaultSnapshot>;
+  /** Store a new file. Rejects when the backend already holds an entry at `path`, even one `load()` did not report. */
+  createFile(path: string, content: string): Promise<void>;
+  /** Store the content of a file, replacing whatever is at `path`. */
   writeFile(path: string, content: string): Promise<void>;
   deleteFile(path: string): Promise<void>;
   renameFile(oldPath: string, newPath: string): Promise<void>;

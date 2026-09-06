@@ -10,8 +10,9 @@ describe('openLink', () => {
     useWorkspace.setState({ activeFile: 'Welcome.md', openTabs: ['Welcome.md'], history: ['Welcome.md'], historyIndex: 0 });
   });
 
-  it('does not create a note for targets that normalise to nothing or to an invalid name', async () => {
-    for (const target of ['/', '..', '.', 'a:b']) await openLink(target, 'Welcome.md');
+  it('does not create a note for targets that normalise to nothing, to an invalid name or into a hidden folder', async () => {
+    // A folder vault never lists dot entries or node_modules: a note created there would clobber a file on disk or vanish.
+    for (const target of ['/', '..', '.', 'a:b', '.trash/Old', 'node_modules/pkg', '.hidden']) await openLink(target, 'Welcome.md');
     expect(app.vault.getFiles().map((f) => f.path)).toEqual(['Welcome.md']);
     expect(useWorkspace.getState().activeFile).toBe('Welcome.md');
   });

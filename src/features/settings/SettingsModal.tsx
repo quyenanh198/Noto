@@ -9,7 +9,7 @@ import {
   isFsaSupported,
   openFolderVault,
   reconnectFolder,
-  useBrowserVault,
+  switchToBrowserVault,
   type PendingFolder,
 } from '../../core/vault/vaultManager';
 import { useCommands, useVaultRevision } from '../../state/hooks';
@@ -272,7 +272,7 @@ function VaultSection() {
               Reconnect folder {pending.name}
             </button>
           )}
-          <button className="settings-button" data-testid="settings-use-browser-vault" disabled={busy} onClick={() => void run('Switched', () => useBrowserVault(app))}>
+          <button className="settings-button" data-testid="settings-use-browser-vault" disabled={busy} onClick={() => void run('Switched', () => switchToBrowserVault(app))}>
             Use browser storage
           </button>
         </div>

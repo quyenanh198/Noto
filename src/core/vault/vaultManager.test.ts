@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { readDraft, replayDraft, writeDraft } from '../../features/editor/draftJournal';
 import { useWorkspace } from '../../state/store';
-import { FileSystemAccessAdapter, type DirectoryHandle, type FileHandle } from './fsa';
+import { FileSystemAccessAdapter, type DirectoryHandle, type FileHandle, type FileLike, type WritableLike } from './fsa';
 import { MemoryAdapter } from './storage';
 import { Vault } from './Vault';
 import {
@@ -13,29 +14,65 @@ import {
   loadVaultChoice,
   openFolderVault,
   pendingFolderFrom,
+  reconnectFolder,
   resolveSavedVault,
   saveVaultChoice,
-  useBrowserVault,
+  switchToBrowserVault,
   vaultLabelFor,
   type VaultHost,
 } from './vaultManager';
 
+class FakeFileHandle implements FileHandle {
+  readonly kind = 'file' as const;
+  constructor(
+    public readonly name: string,
+    public content: string,
+    public lastModified = 1000,
+  ) {}
+  async getFile(): Promise<FileLike> {
+    return {
+      lastModified: this.lastModified,
+      text: async () => this.content,
+      arrayBuffer: async () => new TextEncoder().encode(this.content).buffer as ArrayBuffer,
+    };
+  }
+  async createWritable(): Promise<WritableLike> {
+    let buffer = '';
+    return {
+      write: async (data) => {
+        buffer += typeof data === 'string' ? data : new TextDecoder().decode(data);
+      },
+      close: async () => {
+        this.content = buffer;
+      },
+    };
+  }
+}
+
 /**
- * Minimal directory handle. Methods live on the prototype so the instance survives the
- * structured clone IndexedDB applies (only own properties are copied), like a real handle.
+ * Minimal directory handle holding flat files. Methods live on the prototype so the instance survives
+ * the structured clone IndexedDB applies (only own properties are copied), like a real handle.
  */
 class FakeHandle implements DirectoryHandle {
   readonly kind = 'directory' as const;
+  files = new Map<string, FakeFileHandle>();
   constructor(
     public readonly name: string,
     public permission: PermissionState = 'granted',
   ) {}
-  async *values(): AsyncGenerator<DirectoryHandle | FileHandle> {}
+  async *values(): AsyncGenerator<DirectoryHandle | FileHandle> {
+    yield* this.files.values();
+  }
   getDirectoryHandle(): Promise<DirectoryHandle> {
     return Promise.reject(new Error('not implemented'));
   }
-  getFileHandle(): Promise<FileHandle> {
-    return Promise.reject(new Error('not implemented'));
+  async getFileHandle(name: string, options?: FileSystemGetFileOptions): Promise<FileHandle> {
+    const existing = this.files.get(name);
+    if (existing) return existing;
+    if (!options?.create) throw new DOMException(`${name} not found`, 'NotFoundError');
+    const file = new FakeFileHandle(name, '');
+    this.files.set(name, file);
+    return file;
   }
   removeEntry(): Promise<void> {
     return Promise.reject(new Error('not implemented'));
@@ -43,7 +80,9 @@ class FakeHandle implements DirectoryHandle {
   async queryPermission(): Promise<PermissionState> {
     return this.permission;
   }
+  /** Like the browser prompt with the user clicking Allow: a lapsed permission is granted, a denied one stays denied. */
   async requestPermission(): Promise<PermissionState> {
+    if (this.permission === 'prompt') this.permission = 'granted';
     return this.permission;
   }
 }
@@ -202,10 +241,37 @@ describe('vaultManager', () => {
     await expect(openFolderVault(host)).rejects.toThrow(/not granted/);
     expect(useWorkspace.getState().vaultLabel).toBe('Picked');
 
-    await useBrowserVault(host);
+    await switchToBrowserVault(host);
     expect(host.vault.adapter).toBe(getBrowserAdapter());
     expect(useWorkspace.getState().vaultLabel).toBe(BROWSER_VAULT_LABEL);
     expect(await loadVaultChoice()).toEqual({ kind: 'indexeddb' });
     expect(await getPendingFolder()).toBeNull();
+  });
+
+  it('replays the draft journal into a folder reconnected after a browser restart and opens the recovered note', async () => {
+    try {
+      const host = makeHost({ 'Browser.md': 'b' });
+      await host.vault.load();
+      const handle = new FakeHandle('Notes', 'prompt');
+      handle.files.set('Welcome.md', new FakeFileHandle('Welcome.md', 'welcome', 1000));
+      handle.files.set('A.md', new FakeFileHandle('A.md', 'old', 1000));
+      // What the last session journaled while typing into the folder; the interrupted write never reached the disk.
+      writeDraft({ vault: 'fsa:Notes', path: 'A.md', content: 'old plus typed' });
+
+      // After a restart the folder's permission is back to 'prompt', so bootstrap runs on browser storage and keeps the draft.
+      expect((await resolveSavedVault({ kind: 'fsa', handle, name: 'Notes' })).kind).toBe('indexeddb');
+      expect(await replayDraft(host.vault)).toBe(false);
+      expect(readDraft()?.content).toBe('old plus typed');
+
+      await reconnectFolder(host, { name: 'Notes', handle });
+      expect(host.vault.adapter.kind).toBe('fsa');
+      expect(host.vault.getFile('A.md')?.content).toBe('old plus typed');
+      expect(handle.files.get('A.md')?.content).toBe('old plus typed');
+      expect(readDraft()).toBeNull();
+      expect(useWorkspace.getState().activeFile).toBe('A.md');
+    } finally {
+      localStorage.clear();
+      await saveVaultChoice({ kind: 'indexeddb' });
+    }
   });
 });

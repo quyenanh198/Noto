@@ -1,6 +1,6 @@
 import type { StorageAdapter, VaultFile, VaultSnapshot } from '../types';
 import { errorMessage } from '../util';
-import { basename, dirname, extname, isWithin, joinPath, normalizePath } from './path';
+import { basename, dirname, extname, isHiddenName, isWithin, joinPath, normalizePath } from './path';
 
 /*
  * The DOM lib types for the File System Access API omit the members we rely on
@@ -51,9 +51,9 @@ export function isTextFile(name: string): boolean {
   return TEXT_EXTENSIONS.has(extname(name).toLowerCase());
 }
 
-/** Hidden entries (`.obsidian`, `.git`, …) and dependency folders are never walked. */
+/** Hidden entries (`.obsidian`, `.git`, …) and dependency folders are never walked; `validateName` refuses them for the same reason. */
 export function shouldSkipEntry(name: string): boolean {
-  return name.startsWith('.') || name === 'node_modules';
+  return isHiddenName(name);
 }
 
 /** A sibling name that cannot clash with anything the vault knows: `Note.md` -> `Note.md.k3x9q1.tmp`. */
@@ -97,6 +97,28 @@ export class FileSystemAccessAdapter implements StorageAdapter {
         const file = await entry.getFile();
         files.push({ path, content: await file.text(), mtime: file.lastModified });
       }
+    }
+  }
+
+  /**
+   * `load()` leaves hidden entries and non-text files unread, so the vault cannot tell whether a path it does not
+   * know is free on disk. Creating looks first and refuses, rather than truncating whatever is there.
+   */
+  async createFile(path: string, content: string): Promise<void> {
+    const p = normalizePath(path);
+    const dir = await this.getDirectory(dirname(p), true);
+    if (await this.hasFile(dir, basename(p), p)) throw new Error(`File already exists: ${p}`);
+    await this.writeFile(p, content);
+  }
+
+  /** Whether `dir` holds a file called `name`, without creating one. */
+  private async hasFile(dir: DirectoryHandle, name: string, path: string): Promise<boolean> {
+    try {
+      await dir.getFileHandle(name);
+      return true;
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'NotFoundError') return false;
+      throw new Error(`Cannot write ${path}: ${errorMessage(error)}`);
     }
   }
 

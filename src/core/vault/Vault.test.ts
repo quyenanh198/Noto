@@ -41,6 +41,12 @@ describe('path helpers', () => {
     expect(validateName('')).not.toBeNull();
     expect(validateName('a/b')).not.toBeNull();
     expect(validateName('a[b]')).not.toBeNull();
+    // Entries a folder vault never lists cannot be written to either, or they would vanish on the next load.
+    expect(validateName('.hidden')).not.toBeNull();
+    expect(validateName('.obsidian')).not.toBeNull();
+    expect(validateName('node_modules')).not.toBeNull();
+    expect(validateName('a.b')).toBeNull();
+    expect(validateName('node_modules 2')).toBeNull();
   });
 });
 
@@ -88,6 +94,16 @@ describe('Vault', () => {
     await vault.renameFolder('Docs', 'DOCS');
     expect(vault.getFiles().map((f) => f.path).sort()).toEqual(['DOCS/a.md', 'Misc/b.md', 'Other.md', 'note.md']);
     expect(vault.getFolders()).toEqual(['DOCS', 'Misc']);
+  });
+
+  it('rolls back a create the adapter refuses, so no phantom file is shown', async () => {
+    const { vault, adapter } = await makeVault({ 'a.md': 'A' });
+    // Something the backend holds that load() did not report, like a hidden file on disk.
+    adapter.files.set('unlisted.md', { path: 'unlisted.md', content: 'precious', mtime: 1 });
+    await expect(vault.create('unlisted.md', 'clobber')).rejects.toThrow(/File already exists: unlisted\.md/);
+    expect(adapter.files.get('unlisted.md')?.content).toBe('precious');
+    expect(vault.exists('unlisted.md')).toBe(false);
+    expect(vault.getFiles().map((f) => f.path)).toEqual(['a.md']);
   });
 
   it('createUnique appends counters', async () => {
@@ -241,5 +257,12 @@ describe('IndexedDBAdapter', () => {
     expect((await b.load()).files).toEqual([]);
     await b.replaceAll({ files: [{ path: 'z.md', content: 'Z', mtime: 1 }], folders: ['q'] });
     expect((await b.load()).files.map((f) => f.path)).toEqual(['z.md']);
+  });
+
+  it('creates a file only once', async () => {
+    const a = new IndexedDBAdapter('test-' + Math.random());
+    await a.createFile('n.md', 'first');
+    await expect(a.createFile('n.md', 'second')).rejects.toThrow(/File already exists: n\.md/);
+    expect((await a.load()).files.map((f) => [f.path, f.content])).toEqual([['n.md', 'first']]);
   });
 });

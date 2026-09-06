@@ -44,8 +44,9 @@ describe('switcherRows', () => {
   it('does not match the ".md" path of root-level notes', () => {
     // "road" is a scattered subsequence of "Markdown syntax.md" but not of the title.
     expect(titles('road')).toEqual(['Noto roadmap', '+road']);
-    // Only the note inside a folder exposes its path (and thus ".md") as a match field.
-    expect(titles('.md')).toEqual(['Noto roadmap', '+.md']);
+    // Only the note inside a folder exposes its path (and thus ".md") as a match field. (A note called ".md" would be
+    // a hidden dot-file, so the trailing row refuses to create it rather than offering to.)
+    expect(titles('.md')).toEqual(['Noto roadmap', '!.md']);
   });
 
   it('does not offer to create a note whose title already exists (case-insensitive)', () => {
@@ -96,7 +97,7 @@ describe('switcherRows create item', () => {
       expect(last && last.kind === 'invalid' ? last.reason : '', q).toMatch(/invalid characters/);
       expect(kinds(q), q).not.toContain('create');
     }
-    for (const q of ['.', '..', '/', 'Projects/', 'a//b', 'Projects/../New']) {
+    for (const q of ['.', '..', '/', 'Projects/', 'a//b', 'Projects/../New', '.trash/Old', 'node_modules/pkg', '.hidden']) {
       const last = items(q).at(-1);
       expect(last, q).toMatchObject({ kind: 'invalid', name: q });
       // The reason is whatever the shared note-path rule says, so the switcher and openLink cannot drift apart again.

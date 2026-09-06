@@ -1,6 +1,6 @@
 import type { VaultSnapshot } from '../../core/types';
 import { isTextFile } from '../../core/vault/fsa';
-import { normalizePath } from '../../core/vault/path';
+import { hasHiddenSegment, normalizePath } from '../../core/vault/path';
 
 /** The bits of `File` the import needs; `webkitRelativePath` is set for folder pickers. */
 export interface ImportCandidate {
@@ -11,7 +11,7 @@ export interface ImportCandidate {
 export interface ImportPlan<T extends ImportCandidate> {
   /** Files to create, with their vault-relative target path. */
   create: Array<{ file: T; path: string }>;
-  /** Files skipped because the path exists already or the type is not text. */
+  /** Files skipped because the path exists already, is hidden, or the type is not text. */
   skipped: number;
 }
 
@@ -25,14 +25,17 @@ export function importPath(file: ImportCandidate): string {
   return rel.slice(rel.indexOf('/') + 1);
 }
 
-/** Decide which files to import; existing paths and non-text files are skipped. */
+/**
+ * Decide which files to import; existing paths and non-text files are skipped, as are hidden paths (`.obsidian/…`,
+ * `.trash/…`, `node_modules/…`): a folder vault never lists those, so `exists` cannot protect what is on disk there.
+ */
 export function planImport<T extends ImportCandidate>(files: Iterable<T>, exists: (path: string) => boolean): ImportPlan<T> {
   const create: Array<{ file: T; path: string }> = [];
   const taken = new Set<string>();
   let skipped = 0;
   for (const file of files) {
     const path = importPath(file);
-    if (!path || !isTextFile(path) || exists(path) || taken.has(path)) {
+    if (!path || !isTextFile(path) || hasHiddenSegment(path) || exists(path) || taken.has(path)) {
       skipped++;
       continue;
     }
