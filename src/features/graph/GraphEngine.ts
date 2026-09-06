@@ -48,20 +48,6 @@ interface DragState {
   moved: boolean;
 }
 
-interface ScreenNode {
-  id: string;
-  label: string;
-  x: number;
-  y: number;
-}
-type DebugWindow = Window & { __notoGraph?: { nodes: () => ScreenNode[] } };
-
-/** Live engines in creation order; the tiny `window.__notoGraph` test hook reports the newest one. */
-const liveEngines = new Set<GraphEngine>();
-function installDebugHook(): void {
-  (window as DebugWindow).__notoGraph ??= { nodes: () => [...liveEngines].at(-1)?.screenNodes() ?? [] };
-}
-
 /** Structure-only fingerprint so unchanged data does not reheat the layout. */
 function graphSignature(data: GraphData): string {
   const ids = data.nodes.map((n) => n.id).sort();
@@ -122,14 +108,6 @@ export class GraphEngine {
     canvas.addEventListener('pointerleave', this.onPointerLeave);
     canvas.addEventListener('wheel', this.onWheel, { passive: false });
     canvas.addEventListener('dblclick', this.onDoubleClick);
-    liveEngines.add(this);
-    installDebugHook();
-  }
-
-  /** Current node positions in canvas CSS pixels (used by end-to-end tests). */
-  screenNodes(): ScreenNode[] {
-    const { k, x, y } = this.transform;
-    return this.nodes.map((n) => ({ id: n.id, label: n.label, x: n.x * k + x, y: n.y * k + y }));
   }
 
   // ----- inputs from React -----
@@ -187,7 +165,6 @@ export class GraphEngine {
     if (fixedChanged || !this.hasData) this.autoFit = true;
     this.hasData = true;
     this.sim.alpha(hadNodes ? 0.5 : 1).restart();
-    this.canvas.dataset.nodeCount = String(nodes.length);
     if (this.autoFit) this.fitNow();
     this.schedule();
     return { nodes: nodes.length, links: links.length };
@@ -225,7 +202,6 @@ export class GraphEngine {
     canvas.removeEventListener('pointerleave', this.onPointerLeave);
     canvas.removeEventListener('wheel', this.onWheel);
     canvas.removeEventListener('dblclick', this.onDoubleClick);
-    liveEngines.delete(this);
   }
 
   // ----- layout -----
