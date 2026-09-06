@@ -22,6 +22,24 @@ interface Entry {
   line?: number;
 }
 
+/** A line of a note with every hit on it, shown as one result row. `focus` (the first hit) centres the snippet. */
+interface LineGroup {
+  line: number;
+  focus: SearchMatch;
+  ranges: SearchMatch[];
+}
+
+/** Collapse per-match results into one group per line, in document order. */
+function groupByLine(matches: SearchMatch[]): LineGroup[] {
+  const groups = new Map<number, LineGroup>();
+  for (const m of matches) {
+    const group = groups.get(m.line);
+    if (group) group.ranges.push(m);
+    else groups.set(m.line, { line: m.line, focus: m, ranges: [m] });
+  }
+  return [...groups.values()];
+}
+
 function isModClick(e: MouseEvent | KeyboardEvent): boolean {
   return e.ctrlKey || e.metaKey;
 }
@@ -69,9 +87,10 @@ export function SearchPane() {
     return () => clearTimeout(timer);
   }, [query, matchCase, vaultRev, indexRev]);
 
+  // A new query starts the keyboard cursor over; refreshes for vault edits keep it.
   useEffect(() => {
     setSelected(-1);
-  }, [output]);
+  }, [output.forQuery, matchCase]);
 
   useEffect(() => {
     if (selected >= 0) listRef.current?.querySelector('.is-selected')?.scrollIntoView({ block: 'nearest' });
@@ -79,14 +98,17 @@ export function SearchPane() {
 
   const isCollapsed = (path: string) => overrides[path] ?? collapseAll;
 
+  // One row per matching line (as in Obsidian); the badge and summary still count individual matches.
+  const lineGroups = useMemo(() => output.results.map((r) => groupByLine(r.matches)), [output]);
+
   const entries = useMemo(() => {
     const out: Entry[] = [];
-    for (const r of output.results) {
+    output.results.forEach((r, i) => {
       if (r.matches.length === 0 || (overrides[r.path] ?? collapseAll)) out.push({ path: r.path });
-      else for (const m of r.matches) out.push({ path: r.path, line: m.line });
-    }
+      else for (const g of lineGroups[i]) out.push({ path: r.path, line: g.line });
+    });
     return out;
-  }, [output, overrides, collapseAll]);
+  }, [output, lineGroups, overrides, collapseAll]);
 
   const clear = () => {
     setSearchQuery('');
@@ -164,16 +186,17 @@ export function SearchPane() {
         </div>
       )}
       <div className="search-results" ref={listRef}>
-        {output.results.map((r) => {
+        {output.results.map((r, i) => {
           const collapsed = isCollapsed(r.path);
-          const headerIndex = collapsed || r.matches.length === 0 ? index++ : -1;
-          const rows = collapsed ? [] : r.matches.map((m) => ({ match: m, index: index++ }));
+          // An expanded file with rows has no selectable header: `null` never equals a selection index.
+          const headerIndex = collapsed || r.matches.length === 0 ? index++ : null;
+          const rows = collapsed ? [] : lineGroups[i].map((group) => ({ group, index: index++ }));
           return (
             <ResultGroup
               key={r.path}
               result={r}
               collapsed={collapsed}
-              headerSelected={headerIndex === selected}
+              headerSelected={headerIndex !== null && headerIndex === selected}
               rows={rows}
               selected={selected}
               onToggle={() => toggleGroup(r.path)}
@@ -189,7 +212,7 @@ interface ResultGroupProps {
   result: SearchResult;
   collapsed: boolean;
   headerSelected: boolean;
-  rows: Array<{ match: SearchMatch; index: number }>;
+  rows: Array<{ group: LineGroup; index: number }>;
   selected: number;
   onToggle: () => void;
 }
@@ -224,8 +247,8 @@ function ResultGroup({ result, collapsed, headerSelected, rows, selected, onTogg
         {folder && <span className="search-result-path">{folder}</span>}
         {hasMatches && <span className="search-result-count">{result.matches.length}</span>}
       </div>
-      {rows.map(({ match, index }, i) => (
-        <MatchRow key={i} path={result.path} match={match} lineRanges={result.matches.filter((m) => m.line === match.line)} selected={index === selected} />
+      {rows.map(({ group, index }) => (
+        <MatchRow key={group.line} path={result.path} group={group} selected={index === selected} />
       ))}
     </div>
   );
@@ -233,19 +256,18 @@ function ResultGroup({ result, collapsed, headerSelected, rows, selected, onTogg
 
 interface MatchRowProps {
   path: string;
-  match: SearchMatch;
-  lineRanges: SearchMatch[];
+  group: LineGroup;
   selected: boolean;
 }
 
-function MatchRow({ path, match, lineRanges, selected }: MatchRowProps) {
-  const segments = buildSnippet(match.text, lineRanges, match);
+function MatchRow({ path, group, selected }: MatchRowProps) {
+  const segments = buildSnippet(group.focus.text, group.ranges, group.focus);
   return (
     <div
       className={`search-result-match ${selected ? 'is-selected' : ''}`}
       data-testid="search-result-match"
-      data-line={match.line}
-      onClick={(e) => open({ path, line: match.line }, isModClick(e))}
+      data-line={group.line}
+      onClick={(e) => open({ path, line: group.line }, isModClick(e))}
     >
       {segments.map((s, i) =>
         s.mark ? (
