@@ -5,6 +5,7 @@ import { renderMarkdown, slugify, toggleTaskLine } from '../../core/markdown/ren
 import { noteTitle } from '../../core/vault/path';
 import { useVaultRevision } from '../../state/hooks';
 import { useWorkspace, type NavigationTarget } from '../../state/store';
+import { headingsMatch } from './headingLink';
 import './reading.css';
 
 export interface ReadingViewProps {
@@ -92,9 +93,10 @@ const isEmbedded = (el: Element) => el.closest('.markdown-embed') !== null;
 /** Element to scroll to for a heading or line target; elements inside embeds are ignored. */
 export function findNavigationTarget(root: HTMLElement, nav: NavigationTarget): Element | null {
   if (nav.heading !== undefined) {
-    const want = nav.heading.trim().toLowerCase();
+    const want = nav.heading;
     const headings = [...root.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6')].filter((h) => !isEmbedded(h));
-    const byText = headings.find((h) => (h.dataset.heading ?? '').toLowerCase() === want);
+    // Matched by link text, so `[[Note#A B]]` finds `## A | B`.
+    const byText = headings.find((h) => headingsMatch(h.dataset.heading ?? '', want));
     if (byText) return byText;
     const slug = slugify(nav.heading);
     return headings.find((h) => h.id === slug) ?? null;

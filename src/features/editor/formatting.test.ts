@@ -27,6 +27,17 @@ describe('toggleWrapSpec', () => {
   it('inserts an empty marker pair when there is nothing to wrap', () => {
     expect(apply('a ', { anchor: 2 }, (s) => toggleWrapSpec(s, '=='))).toEqual({ doc: 'a ====', from: 4, to: 4 });
   });
+
+  it("nests italics and bold instead of eating each other's markers", () => {
+    const italic = (s: EditorState) => toggleWrapSpec(s, '*');
+    const bold = (s: EditorState) => toggleWrapSpec(s, '**');
+    expect(apply('**hello** x', { anchor: 5 }, italic)).toEqual({ doc: '***hello*** x', from: 3, to: 8 });
+    expect(apply('**hello** x', { anchor: 2, head: 7 }, italic)).toEqual({ doc: '***hello*** x', from: 3, to: 8 });
+    expect(apply('**hello** x', { anchor: 0, head: 9 }, italic)).toEqual({ doc: '***hello*** x', from: 3, to: 8 });
+    expect(apply('***hello*** x', { anchor: 6 }, italic)).toEqual({ doc: '**hello** x', from: 2, to: 7 });
+    expect(apply('***hello*** x', { anchor: 6 }, bold)).toEqual({ doc: '*hello* x', from: 1, to: 6 });
+    expect(apply('*hello* x', { anchor: 3 }, bold)).toEqual({ doc: '***hello*** x', from: 3, to: 8 });
+  });
 });
 
 describe('toggleChecklistSpec', () => {

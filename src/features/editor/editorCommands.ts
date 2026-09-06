@@ -22,10 +22,14 @@ export const EDITOR_COMMANDS: readonly EditorCommand[] = [
   { id: 'editor:search-in-file', name: 'Search current file', hotkey: 'Mod+F', run: openSearchPanel },
 ];
 
-/** Editor commands apply unless the keyboard focus sits in some other text field (sidebar search, inline title…). */
+/**
+ * Editor commands apply unless the keyboard focus sits in some other text field (sidebar search, inline title,
+ * the editor's own find panel…).
+ */
 export function editorCanAct(view: EditorView): boolean {
   const el = document.activeElement;
-  if (!el || el === document.body || view.dom.contains(el) || el.closest('.modal')) return true;
+  if (!el || el === document.body || el.closest('.modal')) return true;
+  if (view.dom.contains(el) && !el.closest('.cm-panel')) return true;
   return !(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || (el as HTMLElement).isContentEditable);
 }
 

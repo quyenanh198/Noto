@@ -13,6 +13,7 @@ const vault = new Vault(
     files: [
       { path: 'Welcome.md', content: '# Welcome\n\nSee [[Missing note]] and #getting-started', mtime: 0 },
       { path: 'Markdown syntax.md', content: '# Markdown syntax\n\n## Text\n\n## Code\n\n#reference/links', mtime: 0 },
+      { path: 'Odd headings.md', content: '# Odd headings\n\n## A | B\n\n## E]F\n\n## Plain', mtime: 0 },
       { path: 'Projects/Plan.md', content: 'a', mtime: 0 },
       { path: 'Archive/Plan.md', content: 'b', mtime: 0 },
       { path: 'image.png', content: '', mtime: 0 },
@@ -26,13 +27,24 @@ beforeAll(async () => {
   index.attach();
 });
 
-async function complete(doc: string, path = 'Welcome.md', explicit = false): Promise<CompletionResult | null> {
-  const state = EditorState.create({ doc, selection: { anchor: doc.length } });
+async function complete(doc: string, path = 'Welcome.md', explicit = false, pos = doc.length): Promise<CompletionResult | null> {
+  const state = EditorState.create({ doc, selection: { anchor: pos } });
   for (const source of createCompletionSources({ vault, index, path })) {
-    const result = await source(new CompletionContext(state, doc.length, explicit));
+    const result = await source(new CompletionContext(state, pos, explicit));
     if (result) return result;
   }
   return null;
+}
+
+/** Accept the option labelled `label` with the cursor at `pos`; returns the resulting document and cursor. */
+async function accept(doc: string, pos: number, label: string): Promise<{ doc: string; cursor: number }> {
+  const result = (await complete(doc, 'Welcome.md', false, pos)) as CompletionResult;
+  const option = result.options.find((o) => o.label === label) as Completion;
+  const view = new EditorView({ state: EditorState.create({ doc, selection: { anchor: pos } }) });
+  (option.apply as (view: EditorView, c: Completion, from: number, to: number) => void)(view, option, result.from, pos);
+  const out = { doc: view.state.doc.toString(), cursor: view.state.selection.main.head };
+  view.destroy();
+  return out;
 }
 
 const labels = (r: CompletionResult | null) => (r?.options ?? []).map((o) => o.label);
@@ -107,5 +119,18 @@ describe('completion sources', () => {
     expect(view.state.doc.toString()).toBe('[[Welcome]]');
     expect(view.state.selection.main.head).toBe(11);
     view.destroy();
+  });
+
+  it('keeps an existing |alias or #heading suffix when completing the link target', async () => {
+    expect(await accept('[[Welcom|the welcome page]]', 8, 'Welcome')).toEqual({ doc: '[[Welcome|the welcome page]]', cursor: 9 });
+    expect(await accept('[[Wel#Code]]', 5, 'Welcome')).toEqual({ doc: '[[Welcome#Code]]', cursor: 9 });
+    expect(await accept('[[Markdown syntax#Co|alias]]', 20, 'Code')).toEqual({ doc: '[[Markdown syntax#Code|alias]]', cursor: 22 });
+    expect(await accept('[[Wel]] and [[Other|x]]', 5, 'Welcome')).toEqual({ doc: '[[Welcome]] and [[Other|x]]', cursor: 11 });
+  });
+
+  it('inserts a link-safe form of headings that contain | or ]', async () => {
+    expect(labels(await complete('[[Odd headings#'))).toEqual(['Odd headings', 'A B', 'E F', 'Plain']);
+    expect((await accept('[[Odd headings#', 15, 'A B')).doc).toBe('[[Odd headings#A B]]');
+    expect((await accept('[[Odd headings#', 15, 'E F')).doc).toBe('[[Odd headings#E F]]');
   });
 });

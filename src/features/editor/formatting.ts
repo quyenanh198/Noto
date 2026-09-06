@@ -5,43 +5,57 @@ import type { EditorView } from '@codemirror/view';
 const TASK_LINE = /^(\s*)(?:[-*+]|\d+[.)])\s+\[( |x|X)\]\s/;
 const LIST_LINE = /^(\s*)(?:[-*+]|\d+[.)])\s+/;
 
+/** Number of consecutive `ch` characters ending right before `pos`, looking back no further than `limit`. */
+function runBefore(state: EditorState, pos: number, ch: string, limit = 0): number {
+  let i = pos;
+  while (i > limit && state.sliceDoc(i - 1, i) === ch) i--;
+  return pos - i;
+}
+
+/** Number of consecutive `ch` characters starting at `pos`, looking ahead no further than `limit`. */
+function runAfter(state: EditorState, pos: number, ch: string, limit = state.doc.length): number {
+  let i = pos;
+  while (i < limit && state.sliceDoc(i, i + 1) === ch) i++;
+  return i - pos;
+}
+
 /**
  * Wrap each selection (or the word under an empty cursor) in `marker`, or unwrap it when it is already wrapped.
- * With nothing to wrap, inserts a marker pair and places the cursor between them.
+ * `marker` is a run of one character (`*`, `**`, `~~`, `==`). The runs of that character around the text decide
+ * whether it is wrapped, so bold and italics nest like in Obsidian: `**bold**` + `*` -> `***bold***`, and
+ * `***both***` + `*` -> `**bold**`. With nothing to wrap, inserts a marker pair and places the cursor between them.
  */
 export function toggleWrapSpec(state: EditorState, marker: string): TransactionSpec {
   const n = marker.length;
+  const ch = marker[0];
   return state.changeByRange((range) => {
     let { from, to } = range;
     if (from === to) {
       const word = state.wordAt(from);
       if (word) ({ from, to } = word);
     }
-    const inner = state.sliceDoc(from, to);
-    if (to - from >= 2 * n && inner.startsWith(marker) && inner.endsWith(marker)) {
+    // Marker characters at the edges of the selection count as surrounding markers, so selecting `**bold**`
+    // behaves like selecting `bold`.
+    const innerFrom = from + runAfter(state, from, ch, to);
+    const innerTo = to - runBefore(state, to, ch, innerFrom);
+    const run = Math.min(runBefore(state, innerFrom, ch), runAfter(state, innerTo, ch));
+    // A single `*` toggles italics: one or three stars mean italic, two mean bold only.
+    const wrapped = n === 1 ? run % 2 === 1 : run >= n;
+    if (wrapped) {
       return {
         changes: [
-          { from, to: from + n },
-          { from: to - n, to },
+          { from: innerFrom - n, to: innerFrom },
+          { from: innerTo, to: innerTo + n },
         ],
-        range: EditorSelection.range(from, to - 2 * n),
-      };
-    }
-    if (from >= n && state.sliceDoc(from - n, from) === marker && state.sliceDoc(to, to + n) === marker) {
-      return {
-        changes: [
-          { from: from - n, to: from },
-          { from: to, to: to + n },
-        ],
-        range: EditorSelection.range(from - n, to - n),
+        range: EditorSelection.range(innerFrom - n, innerTo - n),
       };
     }
     return {
       changes: [
-        { from, insert: marker },
-        { from: to, insert: marker },
+        { from: innerFrom, insert: marker },
+        { from: innerTo, insert: marker },
       ],
-      range: EditorSelection.range(from + n, to + n),
+      range: EditorSelection.range(innerFrom + n, innerTo + n),
     };
   });
 }

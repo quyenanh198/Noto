@@ -76,6 +76,28 @@ test.describe('editor', () => {
     await expect(page.getByTestId('status-bar')).toContainText('words');
   });
 
+  test('text typed right before a reload or tab close is not lost', async ({ page, context }) => {
+    await openApp(page);
+    const content = page.locator('.cm-content');
+    await content.click();
+    await page.keyboard.press(`${mod}+End`);
+    await page.keyboard.type('\nTyped just before reload.');
+    await expect(content).toContainText('Typed just before reload.');
+    await page.reload();
+    await page.getByTestId('app').waitFor();
+    await expect(page.locator('.cm-content')).toContainText('Typed just before reload.');
+
+    await page.locator('.cm-content').click();
+    await page.keyboard.press(`${mod}+End`);
+    await page.keyboard.type('\nTyped just before closing.');
+    await expect(page.locator('.cm-content')).toContainText('Typed just before closing.');
+    await page.close();
+    const reopened = await context.newPage();
+    await openApp(reopened);
+    await expect(reopened.locator('.cm-content')).toContainText('Typed just before reload.');
+    await expect(reopened.locator('.cm-content')).toContainText('Typed just before closing.');
+  });
+
   test('wikilink autocomplete inserts a link and the link navigates', async ({ page }) => {
     await openApp(page);
     const content = page.locator('.cm-content');
