@@ -133,6 +133,49 @@ describe('vaultManager', () => {
     expect(useWorkspace.getState().activeFile).toBe('Welcome.md');
   });
 
+  it('closes the open tabs before switching so pending edits still reach the old vault', async () => {
+    const host = makeHost({ 'Old.md': 'old' });
+    await host.vault.load();
+    useWorkspace.getState().openFile('Old.md');
+    const next = new MemoryAdapter();
+    let tabsWhileLoading: string[] | null = null;
+    next.load = async () => {
+      tabsWhileLoading = useWorkspace.getState().openTabs;
+      return { files: [], folders: [] };
+    };
+    await activateVault(host, next);
+    expect(tabsWhileLoading).toEqual([]);
+  });
+
+  it('leaves the current vault in place when the new adapter fails to load', async () => {
+    const host = makeHost({ 'Old.md': 'old' });
+    await host.vault.load();
+    const before = host.vault.adapter;
+    useWorkspace.getState().setVaultLabel('Before');
+    const broken = new MemoryAdapter();
+    broken.load = () => Promise.reject(new Error('unreadable'));
+    await expect(activateVault(host, broken)).rejects.toThrow('unreadable');
+    expect(host.vault.adapter).toBe(before);
+    expect(host.vault.getFiles().map((f) => f.path)).toEqual(['Old.md']);
+    expect(host.attach).not.toHaveBeenCalled();
+    expect(useWorkspace.getState().vaultLabel).toBe('Before');
+  });
+
+  it('does not remember a picked folder that fails to load', async () => {
+    await saveVaultChoice({ kind: 'indexeddb' });
+    const host = makeHost({ 'Old.md': 'old' });
+    await host.vault.load();
+    const handle = new FakeHandle('Broken');
+    handle.values = async function* () {
+      throw new DOMException('gone', 'NotFoundError');
+    };
+    picker(async () => handle);
+    await expect(openFolderVault(host)).rejects.toThrow(/gone/);
+    expect(await loadVaultChoice()).toEqual({ kind: 'indexeddb' });
+    expect(host.vault.adapter.kind).toBe('memory');
+    expect(host.vault.getFiles().map((f) => f.path)).toEqual(['Old.md']);
+  });
+
   it('rejects opening a folder when the picker is unavailable and ignores cancellation', async () => {
     const host = makeHost();
     await expect(openFolderVault(host)).rejects.toThrow(/does not support/);

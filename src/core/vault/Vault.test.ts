@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { VaultEvent } from '../types';
 import { IndexedDBAdapter, MemoryAdapter } from './storage';
 import { Vault } from './Vault';
@@ -119,6 +119,91 @@ describe('Vault', () => {
     const { vault } = await makeVault({ 'a.md': '' });
     await vault.switchAdapter(new MemoryAdapter({ files: [{ path: 'b.md', content: '', mtime: 1 }], folders: [] }));
     expect(vault.getFiles().map((f) => f.path)).toEqual(['b.md']);
+  });
+
+  it('keeps the current adapter and files when the new adapter fails to load', async () => {
+    const { vault, adapter } = await makeVault({ 'a.md': 'A' });
+    const broken = new MemoryAdapter();
+    broken.load = () => Promise.reject(new Error('unreadable'));
+    const writes = vi.spyOn(broken, 'writeFile');
+    await expect(vault.switchAdapter(broken)).rejects.toThrow('unreadable');
+    expect(vault.adapter).toBe(adapter);
+    expect(vault.getFiles().map((f) => f.path)).toEqual(['a.md']);
+    await vault.modify('a.md', 'edited');
+    expect(writes).not.toHaveBeenCalled();
+    expect(adapter.files.get('a.md')?.content).toBe('edited');
+  });
+
+  it('sends writes made while a switch is still loading to the old adapter', async () => {
+    const { vault, adapter } = await makeVault({ 'a.md': 'A' });
+    const next = new MemoryAdapter({ files: [{ path: 'a.md', content: 'disk', mtime: 1 }], folders: [] });
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const load = next.load.bind(next);
+    next.load = async () => {
+      await gate;
+      return load();
+    };
+    const switching = vault.switchAdapter(next);
+    await vault.modify('a.md', 'typed while loading');
+    expect(adapter.files.get('a.md')?.content).toBe('typed while loading');
+    expect(next.files.get('a.md')?.content).toBe('disk');
+    release();
+    await switching;
+    expect(vault.adapter).toBe(next);
+    expect(vault.getFile('a.md')?.content).toBe('disk');
+  });
+
+  it('createUnique rejects an empty path instead of creating ".md"', async () => {
+    const { vault } = await makeVault();
+    await expect(vault.createUnique('/')).rejects.toThrow(/empty/);
+    await expect(vault.createUnique('..')).rejects.toThrow(/empty/);
+    expect(vault.getFiles()).toEqual([]);
+  });
+});
+
+describe('Vault link updates on rename', () => {
+  it('rewrites links in other notes when a note is renamed', async () => {
+    const { vault, adapter } = await makeVault({
+      'Welcome.md': 'See [[Linking notes]], [[Linking notes|alias]], [[linking notes#Tags]], ![[Linking notes]], `[[Linking notes]]` and [[Other]].',
+      'Linking notes.md': 'Self [[Linking notes]] and [[#Backlinks]]',
+      'Other.md': 'No links',
+    });
+    const events: VaultEvent[] = [];
+    vault.on((e) => events.push(e));
+    await vault.rename('Linking notes.md', 'Linked notes.md');
+    expect(events.map((e) => e.type)).toEqual(['rename', 'modify', 'modify']);
+    expect(vault.getFile('Welcome.md')?.content).toBe(
+      'See [[Linked notes]], [[Linked notes|alias]], [[Linked notes#Tags]], ![[Linked notes]], `[[Linking notes]]` and [[Other]].',
+    );
+    expect(vault.getFile('Linked notes.md')?.content).toBe('Self [[Linked notes]] and [[#Backlinks]]');
+    expect(vault.getFile('Other.md')?.content).toBe('No links');
+    expect(adapter.files.get('Welcome.md')?.content).toContain('[[Linked notes]]');
+    expect(adapter.files.get('Linked notes.md')?.content).toBe('Self [[Linked notes]] and [[#Backlinks]]');
+  });
+
+  it('uses the shortest unique link text after a move', async () => {
+    const { vault } = await makeVault({ 'A.md': 'Link [[Note]] and [[x/Note]]', 'Note.md': '', 'x/Note.md': '' });
+    await vault.rename('Note.md', 'y/Note.md');
+    expect(vault.getFile('A.md')?.content).toBe('Link [[y/Note]] and [[x/Note]]');
+    await vault.rename('x/Note.md', 'x/Renamed.md');
+    expect(vault.getFile('A.md')?.content).toBe('Link [[y/Note]] and [[Renamed]]');
+  });
+
+  it('rewrites links into a renamed folder and leaves links that still resolve alone', async () => {
+    const { vault } = await makeVault({
+      'Welcome.md': 'See [[Projects/Noto roadmap]] and [[Noto roadmap|road]]',
+      'Projects/Noto roadmap.md': 'Sibling [[Ideas]] and [[Projects/Ideas]]',
+      'Projects/Ideas.md': '',
+    });
+    const events: VaultEvent[] = [];
+    vault.on((e) => events.push(e));
+    await vault.renameFolder('Projects', 'Work');
+    expect(events.map((e) => e.type)).toEqual(['folder-rename', 'modify', 'modify']);
+    expect(vault.getFile('Welcome.md')?.content).toBe('See [[Noto roadmap]] and [[Noto roadmap|road]]');
+    // Path-form links are shortened too, since the basename is unique.
+    expect(vault.getFile('Work/Noto roadmap.md')?.content).toBe('Sibling [[Ideas]] and [[Ideas]]');
+    expect(vault.getFile('Work/Ideas.md')?.content).toBe('');
   });
 });
 

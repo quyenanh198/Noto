@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { app, bootstrap } from './app';
 import { registerCoreCommands } from './commands/coreCommands';
+import { formatHotkey } from './commands/registry';
 import { Icons } from './components/icons';
 import { noteTitle } from './core/vault/path';
 import { BacklinksPane } from './features/backlinks/BacklinksPane';
@@ -20,6 +21,12 @@ import './styles/theme.css';
 import './styles/app.css';
 
 let bootstrapped: Promise<void> | null = null;
+
+/** Label with the command's hotkey as bound on this platform, e.g. "Create new note (Ctrl+Alt+N)". */
+function withHotkey(label: string, commandId: string): string {
+  const hotkey = app.commands.get(commandId)?.hotkey;
+  return hotkey ? `${label} (${formatHotkey(hotkey)})` : label;
+}
 
 export default function App() {
   const ready = useWorkspace((s) => s.ready);
@@ -64,6 +71,7 @@ function Ribbon() {
   const ws = useWorkspace();
   const toggleLeft = (tab: LeftTab) => {
     if (ws.leftSidebarOpen && ws.leftTab === tab) ws.toggleLeftSidebar();
+    else if (tab === 'search') ws.focusSearch();
     else ws.setLeftTab(tab);
   };
   return (
@@ -165,10 +173,10 @@ function Workspace() {
           {ws.graphOpen ? 'Graph view' : active ? active : ''}
         </div>
         <div className="view-header-actions">
-          <button className="clickable-icon" title="Navigate back (Alt+Left)" aria-label="Navigate back" onClick={ws.goBack} disabled={ws.historyIndex <= 0}>
+          <button className="clickable-icon" title={withHotkey('Navigate back', 'nav:back')} aria-label="Navigate back" onClick={ws.goBack} disabled={ws.historyIndex <= 0}>
             <Icons.arrowLeft />
           </button>
-          <button className="clickable-icon" title="Navigate forward (Alt+Right)" aria-label="Navigate forward" onClick={ws.goForward} disabled={ws.historyIndex >= ws.history.length - 1}>
+          <button className="clickable-icon" title={withHotkey('Navigate forward', 'nav:forward')} aria-label="Navigate forward" onClick={ws.goForward} disabled={ws.historyIndex >= ws.history.length - 1}>
             <Icons.arrowRight />
           </button>
           {active && !ws.graphOpen && (
@@ -206,7 +214,7 @@ function EmptyState() {
   return (
     <div className="empty-state" data-testid="empty-state">
       <div className="empty-title">No file is open</div>
-      <button onClick={() => void app.commands.execute('file:new')}>Create new note (Ctrl+N)</button>
+      <button onClick={() => void app.commands.execute('file:new')}>{withHotkey('Create new note', 'file:new')}</button>
       <button onClick={() => void app.commands.execute('switcher:open')}>Open quick switcher (Ctrl+O)</button>
       <button onClick={() => void app.commands.execute('graph:open')}>Open graph view (Ctrl+G)</button>
     </div>
@@ -246,7 +254,7 @@ function TabBar() {
           </button>
         </div>
       ))}
-      <button className="clickable-icon tab-new" title="New note (Ctrl+N)" aria-label="New note" onClick={() => void app.commands.execute('file:new')}>
+      <button className="clickable-icon tab-new" title={withHotkey('New note', 'file:new')} aria-label="New note" onClick={() => void app.commands.execute('file:new')}>
         <Icons.plus />
       </button>
     </div>

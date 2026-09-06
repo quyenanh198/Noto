@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { isWithin } from '../core/vault/path';
 
 export type ViewMode = 'source' | 'preview';
 export type LeftTab = 'files' | 'search' | 'tags';
@@ -29,6 +30,8 @@ export interface WorkspaceState {
   theme: Theme;
   modal: Modal;
   searchQuery: string;
+  /** Bumped by `focusSearch`; the search pane focuses its input whenever it changes. */
+  searchFocusRequest: number;
   /** Pending scroll target for the editor after navigation. Consumed by the editor. */
   pendingNavigation: NavigationTarget | null;
   history: string[];
@@ -49,6 +52,8 @@ export interface WorkspaceState {
   setActiveTab: (path: string) => void;
   /** Called by the vault layer when a file is renamed so tabs follow it. */
   fileRenamed: (oldPath: string, newPath: string) => void;
+  /** Called by the vault layer when a folder is renamed or moved so the tabs inside it follow. */
+  folderRenamed: (oldPath: string, newPath: string) => void;
   fileDeleted: (path: string) => void;
   getViewMode: (path: string | null) => ViewMode;
   setViewMode: (path: string, mode: ViewMode) => void;
@@ -63,6 +68,8 @@ export interface WorkspaceState {
   toggleTheme: () => void;
   setModal: (modal: Modal) => void;
   setSearchQuery: (q: string) => void;
+  /** Show the search pane and put the keyboard focus in its input, even when the pane is already showing. */
+  focusSearch: () => void;
   consumeNavigation: () => NavigationTarget | null;
   goBack: () => void;
   goForward: () => void;
@@ -89,6 +96,7 @@ export const useWorkspace = create<WorkspaceState>()(
       theme: 'dark',
       modal: null,
       searchQuery: '',
+      searchFocusRequest: 0,
       pendingNavigation: null,
       history: [],
       historyIndex: -1,
@@ -146,12 +154,36 @@ export const useWorkspace = create<WorkspaceState>()(
           };
         }),
 
+      folderRenamed: (oldPath, newPath) =>
+        set((s) => {
+          const move = (p: string) => (isWithin(p, oldPath) ? newPath + p.slice(oldPath.length) : p);
+          const viewModes: Record<string, ViewMode> = {};
+          for (const [p, mode] of Object.entries(s.viewModes)) viewModes[move(p)] = mode;
+          return {
+            openTabs: s.openTabs.map(move),
+            activeFile: s.activeFile === null ? null : move(s.activeFile),
+            history: s.history.map(move),
+            viewModes,
+          };
+        }),
+
       fileDeleted: (path) => {
         get().closeTab(path);
         set((s) => {
           const viewModes = { ...s.viewModes };
           delete viewModes[path];
-          return { viewModes };
+          // Drop the file from history too (collapsing runs of the same note), so back/forward cannot bring it back.
+          // Removing the current entry leaves the index just past the previous one, so Back still returns there.
+          const history: string[] = [];
+          let historyIndex = s.historyIndex;
+          s.history.forEach((h, i) => {
+            if (h === path || h === history[history.length - 1]) {
+              if (i < s.historyIndex) historyIndex--;
+              return;
+            }
+            history.push(h);
+          });
+          return { viewModes, history, historyIndex: Math.min(historyIndex, history.length) };
         });
       },
 
@@ -165,7 +197,8 @@ export const useWorkspace = create<WorkspaceState>()(
 
       toggleViewMode: () => {
         const s = get();
-        if (!s.activeFile) return;
+        // With the graph showing there is no note view to toggle; flipping the hidden note's mode would only surprise later.
+        if (!s.activeFile || s.graphOpen) return;
         const next: ViewMode = s.getViewMode(s.activeFile) === 'source' ? 'preview' : 'source';
         s.setViewMode(s.activeFile, next);
       },
@@ -180,6 +213,7 @@ export const useWorkspace = create<WorkspaceState>()(
       toggleTheme: () => set((s) => ({ theme: s.theme === 'dark' ? 'light' : 'dark' })),
       setModal: (modal) => set({ modal }),
       setSearchQuery: (searchQuery) => set({ searchQuery }),
+      focusSearch: () => set((s) => ({ leftTab: 'search', leftSidebarOpen: true, searchFocusRequest: s.searchFocusRequest + 1 })),
 
       consumeNavigation: () => {
         const nav = get().pendingNavigation;

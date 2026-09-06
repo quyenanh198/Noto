@@ -81,3 +81,14 @@ export function validateName(name: string): string | null {
   if (INVALID_NAME.test(n)) return 'Name contains invalid characters: \\ / : * ? " < > | # ^ [ ]';
   return null;
 }
+
+/** Validate a note path: non-empty once normalized (`/`, `.`, `..` are not) and every segment a valid name. Returns an error message or null. */
+export function validateNotePath(path: string): string | null {
+  const p = normalizePath(path);
+  if (!p) return 'Name cannot be empty.';
+  for (const segment of p.split('/')) {
+    const error = validateName(segment);
+    if (error) return error;
+  }
+  return null;
+}

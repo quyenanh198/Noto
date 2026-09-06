@@ -107,6 +107,7 @@ export class CommandRegistry {
 
   /** Hotkey handler for `keydown`. Returns true when a command consumed the event. */
   handleKeydown(e: KeyboardEvent): boolean {
+    if (e.defaultPrevented) return false;
     const bare = !e.ctrlKey && !e.metaKey && !e.altKey;
     if (bare && !BARE_KEYS.has(e.key.toLowerCase())) return false;
     const id = this.byHotkey.get(hotkeyFromEvent(e));

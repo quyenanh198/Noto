@@ -28,6 +28,7 @@ export const BROWSER_VAULT_LABEL = 'Browser storage';
 const SETTINGS_DB = 'noto-settings';
 const KV_STORE = 'kv';
 const VAULT_KEY = 'vault';
+const SEEDED_KEY = 'sampleVaultSeeded';
 
 interface SettingsDB {
   kv: { key: string; value: unknown };
@@ -53,6 +54,17 @@ export async function loadVaultChoice(): Promise<SavedVault | null> {
   const db = await openSettings();
   const value = (await db.get(KV_STORE, VAULT_KEY)) as SavedVault | undefined;
   return value ?? null;
+}
+
+/** Whether the sample notes were ever seeded into the browser vault; a vault the user emptied must stay empty. */
+export async function isSampleVaultSeeded(): Promise<boolean> {
+  const db = await openSettings();
+  return (await db.get(KV_STORE, SEEDED_KEY)) === true;
+}
+
+export async function markSampleVaultSeeded(): Promise<void> {
+  const db = await openSettings();
+  await db.put(KV_STORE, true, SEEDED_KEY);
 }
 
 interface DirectoryPickerWindow {
@@ -109,9 +121,12 @@ export async function getPendingFolder(): Promise<PendingFolder | null> {
 
 /** Point the running app at another adapter: reload, rebuild the index, and start from the first note. */
 export async function activateVault(host: VaultHost, adapter: StorageAdapter): Promise<void> {
+  const ws = useWorkspace.getState();
+  // Close the tabs first: the editors unmount and flush their pending edits into the vault that is still current.
+  ws.closeAllTabs();
   await host.vault.switchAdapter(adapter);
   host.index.attach();
-  const ws = useWorkspace.getState();
+  // Anything opened from the explorer while the new vault was loading belonged to the old one.
   ws.closeAllTabs();
   ws.setVaultLabel(vaultLabelFor(adapter));
   const first = host.vault.getFile('Welcome.md') ?? host.vault.getMarkdownFiles()[0];
@@ -121,8 +136,9 @@ export async function activateVault(host: VaultHost, adapter: StorageAdapter): P
 async function connectFolder(host: VaultHost, handle: DirectoryHandle): Promise<void> {
   const permission = await handle.requestPermission({ mode: 'readwrite' });
   if (permission !== 'granted') throw new Error(`Permission to use the folder "${handle.name}" was not granted.`);
-  await saveVaultChoice({ kind: 'fsa', handle, name: handle.name });
   await activateVault(host, new FileSystemAccessAdapter(handle));
+  // Remember the folder only once it has loaded; a broken one would otherwise be retried on every launch.
+  await saveVaultChoice({ kind: 'fsa', handle, name: handle.name });
 }
 
 /** Ask the user for a folder and make it the vault. Returns false when the picker was cancelled. */

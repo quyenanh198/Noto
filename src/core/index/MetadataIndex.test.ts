@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { SAMPLE_VAULT } from '../vault/sampleVault';
 import { MemoryAdapter } from '../vault/storage';
 import { Vault } from '../vault/Vault';
 import { MetadataIndex } from './MetadataIndex';
@@ -49,7 +50,10 @@ describe('MetadataIndex', () => {
     await vault.rename('C.md', 'D.md');
     expect(index.getMetadata('C.md')).toBeUndefined();
     expect(index.getMetadata('D.md')?.title).toBe('D');
-    expect(index.getUnresolvedLinks()).toEqual([{ target: 'C', sources: ['A.md'] }]);
+    // Links to the renamed note are rewritten, so its backlinks survive the rename.
+    expect(vault.getFile('A.md')?.content).toBe('[[D]] #new');
+    expect(index.getUnresolvedLinks()).toEqual([]);
+    expect(index.getBacklinks('D.md').map((b) => b.source)).toEqual(['A.md']);
     expect(index.getBacklinks('A.md').map((b) => b.source)).toEqual(['D.md']);
 
     await vault.delete('D.md');
@@ -89,6 +93,16 @@ describe('MetadataIndex', () => {
     const d2 = index.getGraph({ localTo: 'A.md', depth: 2 });
     expect(d2.nodes.map((n) => n.id).sort()).toEqual(['A.md', 'B.md', 'C.md']);
     expect(d2.nodes.find((n) => n.id === 'B.md')?.degree).toBe(2);
+  });
+
+  it('keeps backlinks and graph edges when a sample note is renamed', async () => {
+    const { vault, index } = await setup(Object.fromEntries(SAMPLE_VAULT.files.map((f) => [f.path, f.content])));
+    expect(index.getBacklinks('Linking notes.md')).toHaveLength(3);
+    await vault.rename('Linking notes.md', 'Linked notes.md');
+    expect(index.getBacklinks('Linked notes.md').map((b) => b.source)).toEqual(['Markdown syntax.md', 'Projects/Noto roadmap.md', 'Welcome.md']);
+    expect(index.getUnresolvedLinks().map((u) => u.target)).toEqual(['Ideas inbox']);
+    expect(index.getGraph({ includeUnresolved: false }).edges.filter((e) => e.target === 'Linked notes.md')).toHaveLength(3);
+    expect(vault.getFile('Welcome.md')?.content).toContain('[[Linked notes]] explains links');
   });
 
   it('detaches from the vault', async () => {

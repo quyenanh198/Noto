@@ -1,4 +1,5 @@
-import type { StorageAdapter, VaultEvent, VaultFile } from '../types';
+import type { StorageAdapter, VaultEvent, VaultFile, VaultSnapshot } from '../types';
+import { applyLinkRewrites, planLinkRewrites, type LinkRewritePlan } from './linkRewrite';
 import { ancestors, basename, dirname, isMarkdown, isWithin, joinPath, normalizePath, stripExt, withMdExt } from './path';
 
 export type VaultListener = (event: VaultEvent) => void;
@@ -17,7 +18,20 @@ export class Vault {
   constructor(public adapter: StorageAdapter) {}
 
   async load(): Promise<void> {
-    const snap = await this.adapter.load();
+    this.applySnapshot(await this.adapter.load());
+  }
+
+  /**
+   * Swap the storage backend and reload from it. The new adapter is adopted only once its contents
+   * have loaded: until then (and if loading fails) every write still goes to the current backend.
+   */
+  async switchAdapter(adapter: StorageAdapter): Promise<void> {
+    const snap = await adapter.load();
+    this.adapter = adapter;
+    this.applySnapshot(snap);
+  }
+
+  private applySnapshot(snap: VaultSnapshot): void {
     this.files.clear();
     this.folders.clear();
     for (const f of snap.files) {
@@ -30,12 +44,6 @@ export class Vault {
     }
     this.loaded = true;
     this.emit({ type: 'reload' });
-  }
-
-  /** Swap the storage backend and reload from it. */
-  async switchAdapter(adapter: StorageAdapter): Promise<void> {
-    this.adapter = adapter;
-    await this.load();
   }
 
   // ----- queries -----
@@ -135,7 +143,9 @@ export class Vault {
 
   /** Create a note, appending ` 1`, ` 2`... to the name if it already exists. Returns the created path. */
   async createUnique(path: string, content = ''): Promise<VaultFile> {
-    let p = withMdExt(normalizePath(path));
+    const normalized = normalizePath(path);
+    if (!normalized) throw new Error('Path cannot be empty.');
+    let p = withMdExt(normalized);
     if (this.files.has(p)) {
       const base = stripExt(p);
       let i = 1;
@@ -171,10 +181,13 @@ export class Vault {
     if (!file) throw new Error(`File not found: ${from}`);
     if (from === to) return;
     if (this.files.has(to)) throw new Error(`File already exists: ${to}`);
+    const moves = new Map([[from, to]]);
+    const plan = this.planLinkRewrites(moves);
     this.files.delete(from);
     this.files.set(to, { ...file, path: to, mtime: Date.now() });
     await this.adapter.renameFile(from, to);
     this.emit({ type: 'rename', oldPath: from, newPath: to });
+    await this.rewriteLinks(plan, moves);
   }
 
   async createFolder(path: string): Promise<void> {
@@ -207,9 +220,11 @@ export class Vault {
     if (from === to) return;
     if (isWithin(to, from)) throw new Error('Cannot move a folder into itself.');
     if (this.folderExists(to)) throw new Error(`Folder already exists: ${to}`);
-    for (const [path, file] of [...this.files]) {
-      if (!isWithin(path, from)) continue;
-      const next = to + path.slice(from.length);
+    const moves = new Map<string, string>();
+    for (const path of this.files.keys()) if (isWithin(path, from)) moves.set(path, to + path.slice(from.length));
+    const plan = this.planLinkRewrites(moves);
+    for (const [path, next] of moves) {
+      const file = this.files.get(path)!;
       this.files.delete(path);
       this.files.set(next, { ...file, path: next });
     }
@@ -221,6 +236,23 @@ export class Vault {
     this.folders.add(to);
     await this.adapter.renameFolder(from, to);
     this.emit({ type: 'folder-rename', oldPath: from, newPath: to });
+    await this.rewriteLinks(plan, moves);
+  }
+
+  /** Links that point at notes about to move (old path -> new path), found while those notes are still in place. */
+  private planLinkRewrites(moves: ReadonlyMap<string, string>): LinkRewritePlan {
+    return planLinkRewrites(this.getMarkdownFiles(), moves, (target, from) => this.resolveLink(target, from));
+  }
+
+  /** Rewrite the planned links now that the notes have moved, so `[[Old]]` becomes `[[New]]` like in Obsidian. */
+  private async rewriteLinks(plan: LinkRewritePlan, moves: ReadonlyMap<string, string>): Promise<void> {
+    for (const [source, rewrites] of plan) {
+      const path = moves.get(source) ?? source;
+      const file = this.files.get(path);
+      if (!file) continue;
+      const next = applyLinkRewrites(path, file.content, rewrites, (p) => this.linkTextFor(p));
+      if (next !== file.content) await this.modify(path, next);
+    }
   }
 
   // ----- events -----
