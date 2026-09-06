@@ -72,6 +72,8 @@ export interface WorkspaceState {
   setSearchQuery: (q: string) => void;
   /** Show the search pane and put the keyboard focus in its input, even when the pane is already showing. */
   focusSearch: () => void;
+  /** Search for the notes carrying `tag` (with or without its leading `#`) in the search pane. */
+  searchTag: (tag: string) => void;
   consumeNavigation: () => NavigationTarget | null;
   goBack: () => void;
   goForward: () => void;
@@ -218,6 +220,10 @@ export const useWorkspace = create<WorkspaceState>()(
       setModal: (modal) => set({ modal }),
       setSearchQuery: (searchQuery) => set({ searchQuery }),
       focusSearch: () => set((s) => ({ leftTab: 'search', leftSidebarOpen: true, searchFocusRequest: s.searchFocusRequest + 1 })),
+      searchTag: (tag) => {
+        set({ searchQuery: `tag:#${tag.replace(/^#/, '')}` });
+        get().focusSearch();
+      },
 
       consumeNavigation: () => {
         const nav = get().pendingNavigation;

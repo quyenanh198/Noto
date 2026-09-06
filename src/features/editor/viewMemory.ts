@@ -1,4 +1,5 @@
 import type { Compartment, EditorState } from '@codemirror/state';
+import { isWithin } from '../../core/vault/path';
 import { useWorkspace } from '../../state/store';
 
 /*
@@ -44,6 +45,23 @@ export function takeLine(path: string): LineMemory | undefined {
   const memory = lines.get(path);
   lines.delete(path);
   return memory;
+}
+
+function rekey<T>(map: Map<string, T>, oldPath: string, newPath: string): void {
+  for (const [path, memory] of [...map]) {
+    if (!isWithin(path, oldPath)) continue;
+    map.delete(path);
+    map.set(newPath + path.slice(oldPath.length), memory);
+  }
+}
+
+/**
+ * Move what the views of a renamed note (or of every note inside a renamed folder) kept to the new path.
+ * Must run before the tabs follow the rename, which is when entries of unknown paths are dropped.
+ */
+export function viewMemoryRenamed(oldPath: string, newPath: string): void {
+  rekey(editors, oldPath, newPath);
+  rekey(lines, oldPath, newPath);
 }
 
 // Closing a tab (or the whole vault) forgets what its views kept.

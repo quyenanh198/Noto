@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { readDraft, replayDraft, writeDraft } from '../../features/editor/draftJournal';
+import { hashText, readDraft, replayDraft, writeDraft } from '../../features/editor/draftJournal';
 import { useWorkspace } from '../../state/store';
 import { FileSystemAccessAdapter, type DirectoryHandle, type FileHandle, type FileLike, type WritableLike } from './fsa';
 import { MemoryAdapter } from './storage';
@@ -56,10 +56,15 @@ class FakeFileHandle implements FileHandle {
 class FakeHandle implements DirectoryHandle {
   readonly kind = 'directory' as const;
   files = new Map<string, FakeFileHandle>();
+  /** Stands in for the disk entry, so a stored clone still compares equal to the original (as real handles do). */
+  readonly entry = Math.random();
   constructor(
     public readonly name: string,
     public permission: PermissionState = 'granted',
   ) {}
+  async isSameEntry(other: DirectoryHandle | FileHandle): Promise<boolean> {
+    return (other as { entry?: number }).entry === this.entry;
+  }
   async *values(): AsyncGenerator<DirectoryHandle | FileHandle> {
     yield* this.files.values();
   }
@@ -255,11 +260,14 @@ describe('vaultManager', () => {
       const handle = new FakeHandle('Notes', 'prompt');
       handle.files.set('Welcome.md', new FakeFileHandle('Welcome.md', 'welcome', 1000));
       handle.files.set('A.md', new FakeFileHandle('A.md', 'old', 1000));
+      await saveVaultChoice({ kind: 'fsa', handle, name: 'Notes' });
+      const saved = await loadVaultChoice();
+      const folderId = saved?.kind === 'fsa' ? saved.id : '';
       // What the last session journaled while typing into the folder; the interrupted write never reached the disk.
-      writeDraft({ vault: 'fsa:Notes', path: 'A.md', content: 'old plus typed' });
+      writeDraft({ vault: `fsa:${folderId}`, path: 'A.md', content: 'old plus typed', seen: [hashText('old')] });
 
       // After a restart the folder's permission is back to 'prompt', so bootstrap runs on browser storage and keeps the draft.
-      expect((await resolveSavedVault({ kind: 'fsa', handle, name: 'Notes' })).kind).toBe('indexeddb');
+      expect((await resolveSavedVault(saved)).kind).toBe('indexeddb');
       expect(await replayDraft(host.vault)).toBe(false);
       expect(readDraft()?.content).toBe('old plus typed');
 
@@ -273,5 +281,39 @@ describe('vaultManager', () => {
       localStorage.clear();
       await saveVaultChoice({ kind: 'indexeddb' });
     }
+  });
+
+  it('gives a picked folder a lasting identity that another folder of the same name does not share', async () => {
+    const host = makeHost();
+    await host.vault.load();
+    const notes = new FakeHandle('Notes');
+    picker(async () => notes);
+    expect(await openFolderVault(host)).toBe(true);
+    const first = host.vault.adapter as FileSystemAccessAdapter;
+    expect(first.id).toMatch(/\S/);
+    const saved = await loadVaultChoice();
+    expect(saved?.kind === 'fsa' ? saved.id : undefined).toBe(first.id);
+
+    // Picking the same folder again (after a browser restart, say) keeps the identity...
+    expect(await openFolderVault(host)).toBe(true);
+    expect((host.vault.adapter as FileSystemAccessAdapter).id).toBe(first.id);
+
+    // ...while a different folder, however it is called, is another vault.
+    picker(async () => new FakeHandle('Notes'));
+    expect(await openFolderVault(host)).toBe(true);
+    expect((host.vault.adapter as FileSystemAccessAdapter).id).not.toBe(first.id);
+    await switchToBrowserVault(host);
+  });
+
+  it('assigns an identity to a folder remembered before folders had one, and keeps it', async () => {
+    const handle = new FakeHandle('Old');
+    await saveVaultChoice({ kind: 'fsa', handle, name: 'Old' });
+    const loaded = await loadVaultChoice();
+    const id = loaded?.kind === 'fsa' ? loaded.id : undefined;
+    expect(id).toMatch(/\S/);
+    const again = await loadVaultChoice();
+    expect(again?.kind === 'fsa' ? again.id : undefined).toBe(id);
+    expect(await resolveSavedVault({ kind: 'fsa', handle, name: 'Old', id })).toHaveProperty('id', id);
+    await saveVaultChoice({ kind: 'indexeddb' });
   });
 });

@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, type MouseEvent } from 're
 import { app } from '../../app';
 import { openLink } from '../../commands/coreCommands';
 import { renderMarkdown, slugify, toggleTaskLine } from '../../core/markdown/render';
-import { noteTitle } from '../../core/vault/path';
+import { isWithin, noteTitle } from '../../core/vault/path';
 import { useVaultRevision } from '../../state/hooks';
 import { useWorkspace, type NavigationTarget } from '../../state/store';
 import { headingsMatch } from './headingLink';
@@ -19,6 +19,8 @@ export function ReadingView({ path }: ReadingViewProps) {
   const pending = useWorkspace((s) => s.pendingNavigation);
   const strictLineBreaks = useWorkspace((s) => s.strictLineBreaks);
   const contentRef = useRef<HTMLDivElement>(null);
+  /** The note's current path; follows renames of the note and of the folders above it, like the editor's. */
+  const pathRef = useRef(path);
 
   const html = useMemo(() => {
     const content = app.vault.getFile(path)?.content ?? '';
@@ -42,12 +44,21 @@ export function ReadingView({ path }: ReadingViewProps) {
   // on the way out record the top line for the next view. Layout timing: the DOM must still be measurable.
   useLayoutEffect(() => {
     const root = contentRef.current;
+    pathRef.current = path;
+    // A rename swaps this view for one under the new path, which is where that view looks for the line.
+    const offVault = app.vault.on((event) => {
+      const current = pathRef.current;
+      if (event.type === 'rename' && event.oldPath === current) pathRef.current = event.newPath;
+      if (event.type === 'folder-rename' && isWithin(current, event.oldPath)) pathRef.current = event.newPath + current.slice(event.oldPath.length);
+    });
     const line = takeLine(path);
     if (root && line && useWorkspace.getState().pendingNavigation?.path !== path) {
       findNavigationTarget(root, { path, line: line.line })?.scrollIntoView({ block: 'start' });
     }
     return () => {
-      if (root && useWorkspace.getState().openTabs.includes(path)) rememberLine(path, topVisibleLine(root), 'reading');
+      offVault();
+      const current = pathRef.current;
+      if (root && useWorkspace.getState().openTabs.includes(current)) rememberLine(current, topVisibleLine(root), 'reading');
     };
   }, [path]);
 
@@ -64,9 +75,7 @@ export function ReadingView({ path }: ReadingViewProps) {
     const tag = target.closest<HTMLElement>('a.tag');
     if (tag) {
       e.preventDefault();
-      const ws = useWorkspace.getState();
-      ws.setSearchQuery('tag:#' + (tag.dataset.tag ?? ''));
-      ws.setLeftTab('search');
+      useWorkspace.getState().searchTag(tag.dataset.tag ?? '');
       return;
     }
     const checkbox = target.closest<HTMLInputElement>('input.task-list-item-checkbox');

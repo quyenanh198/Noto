@@ -20,10 +20,7 @@ function openGraphNode(node: SimNode): void {
   const ws = useWorkspace.getState();
   if (node.kind === 'note') ws.openFile(node.id);
   else if (node.kind === 'unresolved') void openLink(node.label, ws.activeFile);
-  else {
-    ws.setSearchQuery(`tag:${node.label}`);
-    ws.setLeftTab('search');
-  }
+  else ws.searchTag(node.label);
 }
 
 function plural(count: number, word: string): string {

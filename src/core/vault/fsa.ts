@@ -67,7 +67,14 @@ export class FileSystemAccessAdapter implements StorageAdapter {
   /** Directory handles by vault-relative path; `''` is the root. */
   private dirs = new Map<string, DirectoryHandle>();
 
-  constructor(public readonly root: DirectoryHandle) {
+  /**
+   * @param id Identity of this folder connection, kept in the settings database next to the handle. Folder
+   * names are not unique (every drive can have a "Notes"), so anything that must tell folders apart uses this.
+   */
+  constructor(
+    public readonly root: DirectoryHandle,
+    public readonly id: string = crypto.randomUUID(),
+  ) {
     this.dirs.set('', root);
   }
 

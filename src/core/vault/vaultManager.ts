@@ -12,7 +12,15 @@ import type { Vault } from './Vault';
  * key-value store because directory handles can be stored there (unlike localStorage).
  */
 
-export type SavedVault = { kind: 'indexeddb' } | { kind: 'fsa'; handle: DirectoryHandle; name: string };
+export type SavedVault =
+  | { kind: 'indexeddb' }
+  | {
+      kind: 'fsa';
+      handle: DirectoryHandle;
+      name: string;
+      /** Identity of the folder connection (`FileSystemAccessAdapter.id`); `loadVaultChoice` fills it in for records saved before it existed. */
+      id?: string;
+    };
 
 export interface PendingFolder {
   name: string;
@@ -54,7 +62,12 @@ export async function saveVaultChoice(choice: SavedVault): Promise<void> {
 
 export async function loadVaultChoice(): Promise<SavedVault | null> {
   const db = await openSettings();
-  const value = (await db.get(KV_STORE, VAULT_KEY)) as SavedVault | undefined;
+  let value = (await db.get(KV_STORE, VAULT_KEY)) as SavedVault | undefined;
+  // A folder remembered before connections had identities gets one now, so it keeps it from here on.
+  if (value?.kind === 'fsa' && typeof value.id !== 'string') {
+    value = { ...value, id: crypto.randomUUID() };
+    await db.put(KV_STORE, value, VAULT_KEY);
+  }
   return value ?? null;
 }
 
@@ -103,8 +116,17 @@ async function hasReadWrite(handle: DirectoryHandle): Promise<boolean> {
 
 /** Pick the adapter for a saved choice: the folder when still permitted, otherwise browser storage. */
 export async function resolveSavedVault(saved: SavedVault | null): Promise<StorageAdapter> {
-  if (saved?.kind === 'fsa' && (await hasReadWrite(saved.handle))) return new FileSystemAccessAdapter(saved.handle);
+  if (saved?.kind === 'fsa' && (await hasReadWrite(saved.handle))) return new FileSystemAccessAdapter(saved.handle, saved.id);
   return getBrowserAdapter();
+}
+
+/** Whether two directory handles point at the same folder on disk (fakes without `isSameEntry` never do). */
+async function sameFolder(a: DirectoryHandle, b: DirectoryHandle): Promise<boolean> {
+  try {
+    return a === b || (a.isSameEntry ? await a.isSameEntry(b) : false);
+  } catch {
+    return false;
+  }
 }
 
 export async function loadSavedVault(): Promise<StorageAdapter> {
@@ -152,9 +174,13 @@ async function recoverDraft(vault: Vault): Promise<string | null> {
 async function connectFolder(host: VaultHost, handle: DirectoryHandle): Promise<void> {
   const permission = await handle.requestPermission({ mode: 'readwrite' });
   if (permission !== 'granted') throw new Error(`Permission to use the folder "${handle.name}" was not granted.`);
-  await activateVault(host, new FileSystemAccessAdapter(handle));
+  // The remembered folder keeps its identity when it is reconnected or picked again; any other folder gets a new one.
+  const saved = await loadVaultChoice();
+  const id = saved?.kind === 'fsa' && (await sameFolder(handle, saved.handle)) ? saved.id : undefined;
+  const adapter = new FileSystemAccessAdapter(handle, id);
+  await activateVault(host, adapter);
   // Remember the folder only once it has loaded; a broken one would otherwise be retried on every launch.
-  await saveVaultChoice({ kind: 'fsa', handle, name: handle.name });
+  await saveVaultChoice({ kind: 'fsa', handle, name: handle.name, id: adapter.id });
 }
 
 /** Ask the user for a folder and make it the vault. Returns false when the picker was cancelled. */

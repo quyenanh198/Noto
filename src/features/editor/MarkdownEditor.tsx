@@ -7,7 +7,7 @@ import { parseHeadings } from '../../core/markdown/links';
 import { errorMessage } from '../../core/util';
 import { dirname, extname, isWithin, joinPath, noteTitle, validateName } from '../../core/vault/path';
 import { type NavigationTarget, useWorkspace } from '../../state/store';
-import { clearDraft, vaultDraftId, writeDraft } from './draftJournal';
+import { clearDraft, hashText, vaultDraftId, writeDraft } from './draftJournal';
 import { EDITOR_COMMANDS, registerEditorCommands } from './editorCommands';
 import { createEditorExtensions, mountExtensions } from './extensions';
 import { headingsMatch } from './headingLink';
@@ -23,6 +23,7 @@ export interface MarkdownEditorProps {
 export function MarkdownEditor({ path }: MarkdownEditorProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const sizerRef = useRef<HTMLDivElement>(null);
+  const titleRef = useRef<HTMLTextAreaElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const saverRef = useRef<Saver | null>(null);
   const navRef = useRef<NavigationTarget | null>(null);
@@ -43,9 +44,16 @@ export function MarkdownEditor({ path }: MarkdownEditorProps) {
     // Content the saver could not write because the note was mid-rename; written once the new path is known.
     let orphaned: string | null = null;
     // Unsaved content is mirrored synchronously to localStorage: an IndexedDB or file write started while the page
-    // unloads may never commit, and the mirror is replayed by `bootstrap()` on the next start.
+    // unloads may never commit, and the mirror is replayed by `bootstrap()` on the next start. It carries the
+    // fingerprints of what the note held in storage meanwhile (opened content, then each save), so it is only
+    // ever replayed over one of those.
+    const seen = [hashText(initial)];
     const journal = {
-      write: (content: string) => writeDraft({ vault: vaultDraftId(app.vault.adapter), path: currentPath, content }),
+      write: (content: string) => {
+        const stored = hashText(saver.lastSaved);
+        if (seen[seen.length - 1] !== stored) seen.push(stored);
+        writeDraft({ vault: vaultDraftId(app.vault.adapter), path: currentPath, content, seen });
+      },
       clear: clearDraft,
     };
     const saver = new Saver(
@@ -68,11 +76,7 @@ export function MarkdownEditor({ path }: MarkdownEditorProps) {
           if (target) void openLink(target, currentPath, { heading, newTab });
           else useWorkspace.getState().openFile(currentPath, { heading, newTab });
         },
-        openTag: (name: string) => {
-          const ws = useWorkspace.getState();
-          ws.setSearchQuery(`tag:#${name}`);
-          ws.setLeftTab('search');
-        },
+        openTag: (name: string) => useWorkspace.getState().searchTag(name),
       },
       onDocChanged: (doc: string) => saver.schedule(doc),
     };
@@ -205,6 +209,18 @@ export function MarkdownEditor({ path }: MarkdownEditorProps) {
     }
   };
 
+  // A hotkey that switches the view, opens the graph or closes the tab unmounts the title field before React
+  // can deliver its blur, so a name still being typed is committed here, as a click elsewhere would have done.
+  // Layout timing: the field is gone from the refs by the time a passive cleanup runs. A note that is no longer
+  // at `path` was renamed or deleted under the field, and what it shows is not a request to rename it back.
+  useLayoutEffect(
+    () => () => {
+      const value = titleRef.current?.value;
+      if (value !== undefined && value.trim() !== noteTitle(path) && app.vault.exists(path)) void commitTitle(value);
+    },
+    [path],
+  );
+
   const onTitleKeyDown = (e: ReactKeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -235,6 +251,7 @@ export function MarkdownEditor({ path }: MarkdownEditorProps) {
         {/* The wrapper mirrors the title text so the textarea can grow to as many lines as the title wraps onto. */}
         <div className="inline-title-wrap" data-value={title}>
           <textarea
+            ref={titleRef}
             className="inline-title"
             data-testid="inline-title"
             aria-label="Note title"
