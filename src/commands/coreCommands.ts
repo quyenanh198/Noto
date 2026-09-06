@@ -116,6 +116,7 @@ export function registerCoreCommands(): () => void {
       id: 'modal:close',
       name: 'Close modal',
       hotkey: 'Escape',
+      internal: true,
       checkCallback: () => ws().modal !== null,
       callback: () => ws().setModal(null),
     }),
