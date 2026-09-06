@@ -13,6 +13,7 @@ import {
 } from '../../core/vault/vaultManager';
 import { useCommands, useVaultRevision } from '../../state/hooks';
 import { useWorkspace, type Theme, type ViewMode } from '../../state/store';
+import { hotkeyReference } from './hotkeyReference';
 import { ImportButton } from './ImportButton';
 import { serializeVault } from './vaultTransfer';
 import './settings.css';
@@ -298,7 +299,8 @@ function HotkeysSection() {
   const commands = useCommands();
   const [filter, setFilter] = useState('');
   const q = filter.trim().toLowerCase();
-  const rows = commands.list().filter((c) => !q || c.name.toLowerCase().includes(q) || (c.hotkey ?? '').toLowerCase().includes(q));
+  // A reference table, not the palette: every command is listed whether or not it applies to the current view.
+  const rows = hotkeyReference(commands).filter((c) => !q || c.name.toLowerCase().includes(q) || (c.hotkey ?? '').toLowerCase().includes(q));
   return (
     <>
       <input className="text-input settings-filter" type="search" placeholder="Filter commands…" value={filter} aria-label="Filter commands" data-testid="settings-hotkey-filter" onChange={(e) => setFilter(e.target.value)} />
@@ -311,7 +313,7 @@ function HotkeysSection() {
         </thead>
         <tbody>
           {rows.map((c) => (
-            <tr key={c.id}>
+            <tr key={c.id} data-command={c.id}>
               <td>{c.name}</td>
               <td>{c.hotkey ? <kbd className="hotkey-key">{formatHotkey(c.hotkey)}</kbd> : <span className="hotkey-blank">Blank</span>}</td>
             </tr>

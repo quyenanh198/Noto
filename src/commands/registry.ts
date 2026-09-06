@@ -7,6 +7,8 @@ export interface Command {
   callback: () => void | boolean | Promise<void | boolean>;
   /** Commands that don't apply right now can hide from the palette. */
   checkCallback?: () => boolean;
+  /** Plumbing such as the Escape handler for modals; left out of the hotkey reference in settings. */
+  internal?: boolean;
 }
 
 export const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
@@ -88,6 +90,11 @@ export class CommandRegistry {
 
   get(id: string): Command | undefined {
     return this.commands.get(id);
+  }
+
+  /** Every registered command whether or not it applies right now, sorted by name (the hotkey reference). */
+  all(): Command[] {
+    return [...this.commands.values()].sort((a, b) => a.name.localeCompare(b.name));
   }
 
   /** Commands available right now, sorted by name. */

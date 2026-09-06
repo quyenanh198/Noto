@@ -304,4 +304,17 @@ test.describe('settings', () => {
     await page.keyboard.press('Escape');
     await expect(page.getByTestId('settings-modal')).toBeHidden();
   });
+
+  test('the hotkeys reference lists editor commands from the reading view', async ({ page }) => {
+    await openApp(page);
+    await page.keyboard.press(`${mod}+e`);
+    await expect(page.getByTestId('reading-view')).toBeVisible();
+    await page.keyboard.press(`${mod}+,`);
+    await expect(page.getByTestId('settings-modal')).toBeVisible();
+    await page.getByTestId('settings-nav-hotkeys').click();
+    const table = page.getByTestId('settings-hotkeys');
+    await expect(table.locator('tr[data-command="editor:toggle-bold"]')).toContainText('Toggle bold');
+    await expect(table.locator('tr[data-command="view:toggle-mode"]')).toContainText('Toggle reading view');
+    await expect(table.locator('tr[data-command="modal:close"]')).toHaveCount(0);
+  });
 });
