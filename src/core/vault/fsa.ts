@@ -26,6 +26,8 @@ export interface FileHandle {
   readonly name: string;
   getFile(): Promise<FileLike>;
   createWritable(): Promise<WritableLike>;
+  /** Browsers provide it; fakes may not. */
+  isSameEntry?(other: FileHandle | DirectoryHandle): Promise<boolean>;
 }
 
 export interface DirectoryHandle {
@@ -37,6 +39,8 @@ export interface DirectoryHandle {
   removeEntry(name: string, options?: FileSystemRemoveOptions): Promise<void>;
   queryPermission(descriptor: { mode: PermissionMode }): Promise<PermissionState>;
   requestPermission(descriptor: { mode: PermissionMode }): Promise<PermissionState>;
+  /** Browsers provide it; fakes may not. */
+  isSameEntry?(other: FileHandle | DirectoryHandle): Promise<boolean>;
 }
 
 /** Extensions read into the vault; everything else (images, PDFs…) is left untouched on disk. */
@@ -53,6 +57,11 @@ export function shouldSkipEntry(name: string): boolean {
 
 function describe(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/** A sibling name that cannot clash with anything the vault knows: `Note.md` -> `Note.md.k3x9q1.tmp`. */
+function temporaryPath(path: string): string {
+  return `${path}.${Math.random().toString(36).slice(2, 8)}.tmp`;
 }
 
 /** Vault stored in a folder on disk, accessed through a `FileSystemDirectoryHandle`. */
@@ -118,11 +127,26 @@ export class FileSystemAccessAdapter implements StorageAdapter {
     }
   }
 
-  /** `FileSystemHandle.move()` is not portable, so rename is copy + delete. */
+  /**
+   * `FileSystemHandle.move()` is not portable, so rename is copy + delete. When both names address the
+   * same entry on disk (a case-only rename on macOS or Windows, a different Unicode form on APFS) the copy
+   * would land on the original and the delete would remove the only copy, so the rename goes through a
+   * temporary name instead; a full copy exists at every step.
+   */
   async renameFile(oldPath: string, newPath: string): Promise<void> {
-    const content = await this.readFile(normalizePath(oldPath));
-    await this.writeFile(newPath, content);
-    await this.deleteFile(oldPath);
+    const from = normalizePath(oldPath);
+    const to = normalizePath(newPath);
+    const content = await this.readFile(from);
+    if (await this.isSameEntry(from, to, 'file')) {
+      const tmp = temporaryPath(from);
+      await this.writeFile(tmp, content);
+      await this.deleteFile(from);
+      await this.writeFile(to, content);
+      await this.deleteFile(tmp);
+      return;
+    }
+    await this.writeFile(to, content);
+    await this.deleteFile(from);
   }
 
   async createFolder(path: string): Promise<void> {
@@ -141,14 +165,43 @@ export class FileSystemAccessAdapter implements StorageAdapter {
     this.forgetDirectories(p);
   }
 
-  /** Copies the whole tree (including non-text files) to the new location, then removes the old one. */
+  /**
+   * Copies the whole tree (including non-text files) to the new location, then removes the old one.
+   * Same-entry targets take the detour through a temporary folder, as in `renameFile`.
+   */
   async renameFolder(oldPath: string, newPath: string): Promise<void> {
     const from = normalizePath(oldPath);
     const to = normalizePath(newPath);
     if (!from || !to) throw new Error('Invalid folder path.');
     const source = await this.getDirectory(from, false);
+    if (await this.isSameEntry(from, to, 'directory')) {
+      const tmp = temporaryPath(from);
+      await this.copyTree(source, tmp);
+      await this.deleteFolder(from);
+      await this.copyTree(await this.getDirectory(tmp, false), to);
+      await this.deleteFolder(tmp);
+      return;
+    }
     await this.copyTree(source, to);
     await this.deleteFolder(from);
+  }
+
+  /**
+   * Whether `from` (which exists) and `to` name the same entry on disk: names equal ignoring case are
+   * assumed to (case-insensitive file systems are the default on macOS and Windows), and otherwise the
+   * browser is asked when `to` already exists. Handles are looked up directly so nothing stale is cached.
+   */
+  private async isSameEntry(from: string, to: string, kind: 'file' | 'directory'): Promise<boolean> {
+    if (from.toLowerCase() === to.toLowerCase()) return true;
+    try {
+      const a = await this.getDirectory(dirname(from), false);
+      const b = await this.getDirectory(dirname(to), false);
+      const source = kind === 'file' ? await a.getFileHandle(basename(from)) : await a.getDirectoryHandle(basename(from));
+      const target = kind === 'file' ? await b.getFileHandle(basename(to)) : await b.getDirectoryHandle(basename(to));
+      return source.isSameEntry ? await source.isSameEntry(target) : false;
+    } catch {
+      return false; // `to` does not exist yet, so it cannot be the same entry
+    }
   }
 
   private async copyTree(source: DirectoryHandle, destPath: string): Promise<void> {

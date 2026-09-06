@@ -19,6 +19,8 @@ describe('path helpers', () => {
     expect(normalizePath('/a//b/./c.md')).toBe('a/b/c.md');
     expect(normalizePath('a/../b.md')).toBe('b.md');
     expect(normalizePath('a\\b')).toBe('a/b');
+    // Names on disk may legitimately start or end with spaces; only user-typed names are trimmed (by the UI).
+    expect(normalizePath(' Archive/ draft.md')).toBe(' Archive/ draft.md');
   });
   it('splits', () => {
     expect(dirname('a/b/c.md')).toBe('a/b');
@@ -74,6 +76,18 @@ describe('Vault', () => {
     await expect(vault.rename('nope.md', 'b.md')).rejects.toThrow(/not found/);
     await vault.create('b.md');
     await expect(vault.rename('a.md', 'b.md')).rejects.toThrow(/exists/);
+  });
+
+  it('treats names that differ only in case as the same entry when renaming', async () => {
+    const { vault } = await makeVault({ 'Note.md': 'n', 'Other.md': 'o', 'Docs/a.md': 'a', 'Misc/b.md': 'b' });
+    await expect(vault.rename('Note.md', 'other.md')).rejects.toThrow(/File already exists: Other\.md/);
+    await expect(vault.renameFolder('Misc', 'docs')).rejects.toThrow(/Folder already exists: Docs/);
+    expect(vault.getFiles().map((f) => f.path).sort()).toEqual(['Docs/a.md', 'Misc/b.md', 'Note.md', 'Other.md']);
+    // Changing only the casing of an entry's own name is a legitimate rename.
+    await vault.rename('Note.md', 'note.md');
+    await vault.renameFolder('Docs', 'DOCS');
+    expect(vault.getFiles().map((f) => f.path).sort()).toEqual(['DOCS/a.md', 'Misc/b.md', 'Other.md', 'note.md']);
+    expect(vault.getFolders()).toEqual(['DOCS', 'Misc']);
   });
 
   it('createUnique appends counters', async () => {
