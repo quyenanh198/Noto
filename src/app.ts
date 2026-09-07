@@ -49,7 +49,8 @@ export async function bootstrap(): Promise<void> {
     adapter = getBrowserAdapter();
     await app.vault.switchAdapter(adapter);
   }
-  if (adapter.kind === 'indexeddb' && !(await isSampleVaultSeeded())) {
+  // Kho trống (trình duyệt hoặc máy chủ) thì gieo bộ ghi chú mẫu một lần.
+  if ((adapter.kind === 'indexeddb' || adapter.kind === 'server') && !(await isSampleVaultSeeded())) {
     if (app.vault.getFiles().length === 0) {
       for (const f of SAMPLE_VAULT.files) await app.vault.create(f.path, f.content);
       for (const d of SAMPLE_VAULT.folders) if (!app.vault.folderExists(d)) await app.vault.createFolder(d);

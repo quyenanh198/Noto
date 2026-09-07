@@ -5,11 +5,14 @@ import { Icons } from '../../components/icons';
 import { errorMessage } from '../../core/util';
 import {
   BROWSER_VAULT_LABEL,
+  SERVER_VAULT_LABEL,
   getPendingFolder,
   isFsaSupported,
   openFolderVault,
   reconnectFolder,
   switchToBrowserVault,
+  switchToServerVault,
+  isServerVaultAvailable,
   type PendingFolder,
 } from '../../core/vault/vaultManager';
 import { useCommands, useVaultRevision } from '../../state/hooks';
@@ -206,8 +209,18 @@ function VaultSection() {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<{ text: string; error?: boolean } | null>(null);
   const supported = isFsaSupported();
-  const isBrowser = app.vault.adapter.kind !== 'fsa';
+  const kind = app.vault.adapter.kind;
   const fileCount = app.vault.getFiles().length;
+  const [hasServer, setHasServer] = useState(false);
+  useEffect(() => {
+    isServerVaultAvailable().then(setHasServer, () => setHasServer(false));
+  }, []);
+  const currentDescription =
+    kind === 'server'
+      ? `${fileCount} files, stored as markdown on the server (${SERVER_VAULT_LABEL}). Every device you sign in from sees the same notes.`
+      : kind === 'fsa'
+        ? `${fileCount} files, read from and written to a folder on your disk.`
+        : `${fileCount} files, stored in this browser (IndexedDB). Clearing site data removes them.`;
 
   const refreshPending = () => {
     getPendingFolder().then(setPending, () => setPending(null));
@@ -242,11 +255,7 @@ function VaultSection() {
     <>
       <SettingItem
         name="Current vault"
-        description={
-          isBrowser
-            ? `${fileCount} files, stored in this browser (IndexedDB). Clearing site data removes them.`
-            : `${fileCount} files, read from and written to a folder on your disk.`
-        }
+        description={currentDescription}
       >
         <div className="settings-vault-name" data-testid="settings-vault-label">
           {vaultLabel}
@@ -256,12 +265,24 @@ function VaultSection() {
         name="Vault location"
         stacked
         description={
-          supported
-            ? 'Open a folder on disk to work directly with its markdown files, or keep the notes inside the browser.'
-            : 'Your browser does not support opening folders (Chrome/Edge do). Notes stay in browser storage.'
+          hasServer
+            ? 'Keep the notes on the server (any device sees them), open a folder on this computer, or keep them inside this browser.'
+            : supported
+              ? 'Open a folder on disk to work directly with its markdown files, or keep the notes inside the browser.'
+              : 'Your browser does not support opening folders (Chrome/Edge do). Notes stay in browser storage.'
         }
       >
         <div className="settings-actions">
+          {hasServer && (
+            <button
+              className="settings-button"
+              data-testid="settings-use-server-vault"
+              disabled={busy || kind === 'server'}
+              onClick={() => void run('Switched', () => switchToServerVault(app))}
+            >
+              Use server storage
+            </button>
+          )}
           {supported && (
             <button className="settings-button" data-testid="settings-open-folder" disabled={busy} onClick={() => void run('Opened folder', () => openFolderVault(app))}>
               Open folder…

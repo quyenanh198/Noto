@@ -4,6 +4,7 @@ import { readDraft, replayDraft } from '../../features/editor/draftJournal';
 import { useWorkspace } from '../../state/store';
 import type { StorageAdapter } from '../types';
 import { FileSystemAccessAdapter, type DirectoryHandle } from './fsa';
+import { ServerAdapter, isServerVaultAvailable } from './serverStorage';
 import { IndexedDBAdapter } from './storage';
 import type { Vault } from './Vault';
 
@@ -14,6 +15,7 @@ import type { Vault } from './Vault';
 
 export type SavedVault =
   | { kind: 'indexeddb' }
+  | { kind: 'server' }
   | {
       kind: 'fsa';
       handle: DirectoryHandle;
@@ -34,6 +36,7 @@ export interface VaultHost {
 }
 
 export const BROWSER_VAULT_LABEL = 'Browser storage';
+export const SERVER_VAULT_LABEL = 'Mac mini (server)';
 
 const SETTINGS_DB = 'noto-settings';
 const KV_STORE = 'kv';
@@ -95,6 +98,15 @@ export function isFsaSupported(): boolean {
 }
 
 let browserAdapter: IndexedDBAdapter | null = null;
+let serverAdapter: ServerAdapter | null = null;
+
+/** Kho trên máy chủ; một kết nối dùng chung cho cả app. */
+export function getServerAdapter(): ServerAdapter {
+  serverAdapter ??= new ServerAdapter();
+  return serverAdapter;
+}
+
+export { isServerVaultAvailable };
 
 /** The default browser-storage vault; created once so the app and the manager share one connection. */
 export function getBrowserAdapter(): IndexedDBAdapter {
@@ -103,7 +115,8 @@ export function getBrowserAdapter(): IndexedDBAdapter {
 }
 
 export function vaultLabelFor(adapter: StorageAdapter): string {
-  return adapter instanceof FileSystemAccessAdapter ? adapter.name : BROWSER_VAULT_LABEL;
+  if (adapter instanceof FileSystemAccessAdapter) return adapter.name;
+  return adapter.kind === 'server' ? SERVER_VAULT_LABEL : BROWSER_VAULT_LABEL;
 }
 
 async function hasReadWrite(handle: DirectoryHandle): Promise<boolean> {
@@ -114,9 +127,15 @@ async function hasReadWrite(handle: DirectoryHandle): Promise<boolean> {
   }
 }
 
-/** Pick the adapter for a saved choice: the folder when still permitted, otherwise browser storage. */
+/**
+ * Pick the adapter for a saved choice: the folder when still permitted, the server vault when it is
+ * the saved choice (or when nothing was ever chosen and this deployment has one), otherwise browser storage.
+ */
 export async function resolveSavedVault(saved: SavedVault | null): Promise<StorageAdapter> {
   if (saved?.kind === 'fsa' && (await hasReadWrite(saved.handle))) return new FileSystemAccessAdapter(saved.handle, saved.id);
+  // Bản tự host có kho trên Mac mini: mặc định dùng nó để ghi chú không kẹt trong một trình duyệt.
+  // Người chọn "browser storage" đã có lựa chọn lưu lại nên không bị kéo ngược về đây.
+  if ((saved?.kind === 'server' || !saved) && (await isServerVaultAvailable())) return getServerAdapter();
   return getBrowserAdapter();
 }
 
@@ -201,6 +220,13 @@ export async function openFolderVault(host: VaultHost): Promise<boolean> {
 /** Re-request access to a saved folder. Must be called from a user gesture (a click handler). */
 export async function reconnectFolder(host: VaultHost, pending: PendingFolder): Promise<void> {
   await connectFolder(host, pending.handle);
+}
+
+/** Chuyển sang kho trên máy chủ (Mac mini) và nhớ lựa chọn đó. */
+export async function switchToServerVault(host: VaultHost): Promise<void> {
+  if (!(await isServerVaultAvailable())) throw new Error('This Noto has no server vault (it is not served by the Noto server).');
+  await saveVaultChoice({ kind: 'server' });
+  await activateVault(host, getServerAdapter());
 }
 
 /** Switch back to the vault kept in the browser and forget the folder handle. */

@@ -21,7 +21,7 @@ export type VaultEvent =
   | { type: 'folder-rename'; oldPath: string; newPath: string }
   | { type: 'reload' };
 
-export type StorageKind = 'memory' | 'indexeddb' | 'fsa';
+export type StorageKind = 'memory' | 'indexeddb' | 'fsa' | 'server';
 
 /** Persistence backend. The Vault keeps the in-memory truth and mirrors changes here. */
 export interface StorageAdapter {
