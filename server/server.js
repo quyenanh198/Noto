@@ -135,6 +135,18 @@ async function renamePath(oldRel, newRel) {
 async function handleApi(req, res, url) {
   const route = `${req.method} ${url.pathname}`;
   if (route === 'GET /api/vault/ping') return json(res, 200, { ok: true });
+  // File thô trong kho (ảnh minh hoạ .svg/.png…): ghi chú nhúng bằng ![alt](/api/vault/raw/<đường dẫn>).
+  // Thư mục bắt đầu bằng dấu chấm (vd. `.hình`) không hiện trong danh sách ghi chú nhưng vẫn phục vụ được ở đây.
+  if (req.method === 'GET' && url.pathname.startsWith('/api/vault/raw/')) {
+    const rel = safeRelative(decodeURIComponent(url.pathname.slice('/api/vault/raw/'.length)));
+    const file = abs(rel);
+    const stat = await fs.stat(file).catch(() => null);
+    if (!stat || !stat.isFile()) throw new HttpError(404, 'not_found');
+    const ext = path.extname(file).toLowerCase();
+    res.writeHead(200, { 'content-type': MIME[ext] || 'application/octet-stream', 'content-length': stat.size, 'cache-control': 'public, max-age=3600' });
+    createReadStream(file).pipe(res);
+    return;
+  }
   if (route === 'GET /api/vault') return json(res, 200, await loadVault());
 
   if (route === 'POST /api/vault/file') {
